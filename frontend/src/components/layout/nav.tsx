@@ -6,8 +6,13 @@ import { Menu, X, Waves } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-const scrollTo = (id: string) => () =>
+const scrollTo = (id: string) => () => {
+  if (window.location.pathname !== "/") {
+    window.location.href = "/#" + id;
+    return;
+  }
   document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+};
 
 export function Navbar() {
   const [isOpen, setIsOpen] = useState(false);

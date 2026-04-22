@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Nunito, Playfair_Display } from "next/font/google";
 import "./globals.css";
 import { Navbar, Footer } from "@/components/layout/nav";
+import { HashScroller } from "@/components/layout/hash-scroller";
 import { Toaster } from "sonner";
 
 const nunito = Nunito({ subsets: ["latin"], variable: "--font-nunito" });
@@ -21,6 +22,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${nunito.variable} ${playfair.variable}`}>
       <body className="font-sans antialiased bg-white text-ocean-900">
+        <HashScroller />
         <Navbar />
         <main>{children}</main>
         <Footer />
