@@ -155,7 +155,7 @@ export default function GalleryPage() {
               <button
                 key={i}
                 onClick={() => openLightbox(i)}
-                className="overflow-hidden rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-ocean-400"
+                className="overflow-hidden rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-ocean-700"
                 style={{
                   gridColumn: `${colStart}/${colEnd}`,
                   gridRow: `${rowStart}/${rowEnd}`,
@@ -178,7 +178,7 @@ export default function GalleryPage() {
             <button
               key={i}
               onClick={() => openLightbox(i)}
-              className="aspect-[3/2] overflow-hidden rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-ocean-400"
+              className="aspect-[3/2] overflow-hidden rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-ocean-700"
             >
               <img
                 src={img.src}

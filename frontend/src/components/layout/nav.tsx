@@ -38,14 +38,14 @@ export function Navbar() {
               { label: "Gallery", href: "/gallery" },
             ].map((item, i) => (
               item.href ? (
-                <Link key={item.label} href={item.href} className="text-sm font-medium text-ocean-600 hover:text-ocean-900 hover:bg-ocean-50 px-4 py-2 rounded-lg transition-colors">
+                <Link key={item.label} href={item.href} className="text-sm font-medium text-ocean-700 hover:text-ocean-900 hover:bg-ocean-50 px-4 py-2 rounded-lg transition-colors">
                   {item.label}
                 </Link>
               ) : (
                 <button
                   key={item.id}
                   onClick={scrollTo(item.id!)}
-                  className="text-sm font-medium text-ocean-600 hover:text-ocean-900 hover:bg-ocean-50 px-4 py-2 rounded-lg transition-colors"
+                  className="text-sm font-medium text-ocean-700 hover:text-ocean-900 hover:bg-ocean-50 px-4 py-2 rounded-lg transition-colors"
                 >
                   {item.label}
                 </button>
@@ -59,7 +59,7 @@ export function Navbar() {
           </div>
 
           <button
-            className="md:hidden p-2 text-ocean-600"
+            className="md:hidden p-2 text-ocean-700"
             onClick={() => setIsOpen(!isOpen)}
           >
             {isOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
@@ -74,9 +74,9 @@ export function Navbar() {
         )}
       >
         <div className="px-4 py-4 space-y-3 border-t border-ocean-100">
-          <button onClick={() => { scrollTo("about")(); setIsOpen(false); }} className="block text-sm font-medium text-ocean-600">About</button>
-          <button onClick={() => { scrollTo("pricing")(); setIsOpen(false); }} className="block text-sm font-medium text-ocean-600">Pricing</button>
-          <Link href="/gallery" onClick={() => setIsOpen(false)} className="block text-sm font-medium text-ocean-600">Gallery</Link>
+          <button onClick={() => { scrollTo("about")(); setIsOpen(false); }} className="block text-sm font-medium text-ocean-700">About</button>
+          <button onClick={() => { scrollTo("pricing")(); setIsOpen(false); }} className="block text-sm font-medium text-ocean-700">Pricing</button>
+          <Link href="/gallery" onClick={() => setIsOpen(false)} className="block text-sm font-medium text-ocean-700">Gallery</Link>
           <Link href="/book" onClick={() => setIsOpen(false)}>
             <Button variant="cta" className="w-full">Book Now</Button>
           </Link>

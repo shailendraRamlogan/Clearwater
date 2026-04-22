@@ -107,7 +107,7 @@ export function ModernCalendar({
                 !dis && !isSelected && "text-ocean-600 hover:bg-ocean-50",
                 !inMonth && !isSelected && "text-ocean-300",
                 isSelected && "bg-ocean-700 text-white shadow-sm",
-                isToday && !isSelected && "ring-2 ring-ocean-300 ring-offset-1 font-bold"
+                isToday && !isSelected && "ring-2 ring-ocean-700 ring-offset-1 font-bold"
               )}
             >
               <span className={cn("text-sm font-medium leading-none", isSelected && "font-bold")}>

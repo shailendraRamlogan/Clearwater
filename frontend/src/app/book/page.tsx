@@ -222,7 +222,7 @@ export default function BookingPage() {
                     isComplete
                       ? "bg-ocean-700 text-white"
                       : isActive
-                      ? "bg-ocean-700 text-white ring-4 ring-ocean-100"
+                      ? "bg-ocean-700 text-white ring-4 ring-ocean-200"
                       : "bg-ocean-100 text-ocean-400"
                   }`}
                 >
@@ -328,7 +328,7 @@ export default function BookingPage() {
                           }
                           className={`relative p-4 rounded-lg border-2 text-left transition-colors hover:border-ocean-300 ${
                             isSelected
-                              ? "border-ocean-500 bg-ocean-50"
+                              ? "border-ocean-700 bg-ocean-50"
                               : "border-ocean-100"
                           }`}
                         >
@@ -548,7 +548,7 @@ export default function BookingPage() {
                       </Label>
                       <textarea
                         id="specialComment"
-                        className="mt-1 flex w-full rounded-lg border border-ocean-200 bg-white px-4 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ocean-400 min-h-[80px]"
+                        className="mt-1 flex w-full rounded-lg border border-ocean-200 bg-white px-4 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ocean-700 min-h-[80px]"
                         placeholder="e.g., It's Sarah's 30th birthday! Can we have a cake on the boat?"
                         value={store.specialComment}
                         onChange={(e) =>
@@ -699,7 +699,7 @@ export default function BookingPage() {
                               disableDropdown={false}
                               enableAreaCodes={false}
                               countryCodeEditable={false}
-                              inputClass="!w-full !border-ocean-200 !rounded-lg !py-2 !px-3 !text-sm !h-10 !bg-white focus:!ring-2 focus:!ring-ocean-400 focus:!outline-none !pl-14"
+                              inputClass="!w-full !border-ocean-200 !rounded-lg !py-2 !px-3 !text-sm !h-10 !bg-white focus:!ring-2 focus:!ring-ocean-700 focus:!outline-none !pl-14"
                               buttonClass="!rounded-l-lg !border-ocean-200 !bg-ocean-50"
                               dropdownClass="!rounded-lg"
                               containerClass="!mt-0"
