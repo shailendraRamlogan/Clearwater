@@ -86,11 +86,11 @@ export function ModernCalendar({
               disabled={disabled}
               onClick={() => onSelect?.(day)}
               className={cn(
-                "relative h-11 rounded-xl text-sm font-medium transition-all duration-200",
+                "relative w-11 h-11 rounded-full text-sm font-medium transition-all duration-200",
                 disabled && "text-ocean-200 cursor-not-allowed",
-                !disabled && !isSelected && "text-ocean-700 hover:bg-ocean-50",
+                !disabled && !isSelected && "text-ocean-700 hover:bg-ocean-100",
                 isSelected && "bg-ocean-500 text-white shadow-md shadow-ocean-500/25 hover:bg-ocean-600",
-                isToday && !isSelected && "ring-2 ring-ocean-300 ring-offset-1"
+                isToday && !isSelected && "ring-2 ring-ocean-400 ring-offset-2"
               )}
             >
               {format(day, "d")}

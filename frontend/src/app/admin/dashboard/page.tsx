@@ -8,19 +8,49 @@ import {
   CalendarDays,
   Users,
   DollarSign,
-  ChevronLeft,
   ChevronRight,
+  Clock,
+  Ship,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { formatCurrency, formatTime } from "@/lib/utils";
+import { getDailyReport } from "@/lib/booking-service";
+import { useEffect, useState } from "react";
+import type { DailyReport } from "@/types/booking";
 
 export default function AdminDashboard() {
-  // Mock stats for now
+  const [report, setReport] = useState<DailyReport | null>(null);
+
+  useEffect(() => {
+    getDailyReport(format(new Date(), "yyyy-MM-dd")).then(setReport);
+  }, []);
+
   const stats = [
-    { label: "Today's Bookings", value: 12, icon: CalendarDays, color: "text-ocean-500" },
-    { label: "Total Guests", value: 34, icon: Users, color: "text-ocean-500" },
-    { label: "Revenue (Today)", value: "$6,850", icon: DollarSign, color: "text-green-500" },
-    { label: "Occupancy Rate", value: "72%", icon: BarChart3, color: "text-sand-500" },
+    {
+      label: "Today's Bookings",
+      value: report?.total_bookings ?? 0,
+      icon: CalendarDays,
+      color: "text-ocean-500",
+    },
+    {
+      label: "Total Guests",
+      value: (report?.total_adults ?? 0) + (report?.total_children ?? 0),
+      icon: Users,
+      color: "text-ocean-500",
+    },
+    {
+      label: "Revenue (Today)",
+      value: formatCurrency(report?.total_revenue ?? 0),
+      icon: DollarSign,
+      color: "text-green-500",
+    },
+    {
+      label: "Adults / Children",
+      value: `${report?.total_adults ?? 0} / ${report?.total_children ?? 0}`,
+      icon: BarChart3,
+      color: "text-sand-500",
+    },
   ];
 
   return (
@@ -69,7 +99,7 @@ export default function AdminDashboard() {
           <CardContent className="pt-6">
             <h3 className="font-semibold mb-2">Upcoming Tours</h3>
             <p className="text-sm text-ocean-500 mb-4">
-              {format(new Date(), "MMM d")} — 4 tours scheduled
+              {report?.total_bookings ?? 0} tours scheduled today
             </p>
             <Link href="/admin/bookings">
               <Button variant="outline" size="sm">
@@ -106,28 +136,75 @@ export default function AdminDashboard() {
         </Card>
       </div>
 
-      {/* Recent Bookings Placeholder */}
+      {/* Recent Bookings */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Recent Bookings</CardTitle>
-            <div className="flex gap-2">
-              <Button variant="ghost" size="icon">
-                <ChevronLeft className="h-4 w-4" />
+            <Link href="/admin/bookings">
+              <Button variant="ghost" size="sm">
+                View All <ChevronRight className="ml-1 h-4 w-4" />
               </Button>
-              <Button variant="ghost" size="icon">
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
+            </Link>
           </div>
         </CardHeader>
         <CardContent>
-          <div className="text-center py-8 text-ocean-400">
-            <p>Bookings will appear here once the backend is connected.</p>
-            <p className="text-sm mt-1">
-              Connect to the API to see live data.
-            </p>
-          </div>
+          {report && report.bookings.length > 0 ? (
+            <div className="space-y-4">
+              {report.bookings.map((booking) => (
+                <div
+                  key={booking.id}
+                  className="flex items-center justify-between p-4 bg-ocean-50 rounded-xl"
+                >
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-1">
+                      <span className="font-mono text-sm font-bold text-ocean-600">
+                        {booking.id}
+                      </span>
+                      <span
+                        className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                          booking.status === "confirmed"
+                            ? "bg-green-100 text-green-700"
+                            : "bg-yellow-100 text-yellow-700"
+                        }`}
+                      >
+                        {booking.status}
+                      </span>
+                    </div>
+                    <p className="text-sm text-ocean-700">
+                      {booking.guest.first_name} {booking.guest.last_name}
+                    </p>
+                    <div className="flex items-center gap-4 mt-1 text-xs text-ocean-400">
+                      <span className="flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        {formatTime(booking.time_slot.start_time)}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Ship className="h-3 w-3" />
+                        {booking.time_slot.boat_name}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Users className="h-3 w-3" />
+                        {booking.items.reduce((s, i) => s + i.quantity, 0)} guests
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-bold text-lg">
+                      {formatCurrency(booking.total_price)}
+                    </p>
+                    {booking.special_occasion && (
+                      <p className="text-xs text-ocean-400">🎉 Special</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-ocean-400">
+              <p>No bookings for today.</p>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
