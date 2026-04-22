@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { format } from "date-fns";
-import { motion } from "framer-motion";
+// motion removed
 import {
   BarChart3,
   CalendarDays,
@@ -70,12 +70,7 @@ export default function AdminDashboard() {
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         {stats.map((stat, i) => (
-          <motion.div
-            key={i}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.1 }}
-          >
+          <div key={i}>
             <Card>
               <CardContent className="pt-6">
                 <div className="flex items-center justify-between">
@@ -89,7 +84,7 @@ export default function AdminDashboard() {
                 </div>
               </CardContent>
             </Card>
-          </motion.div>
+          </div>
         ))}
       </div>
 

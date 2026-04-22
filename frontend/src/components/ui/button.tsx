@@ -14,7 +14,7 @@ const buttonVariants = cva(
         secondary: "bg-ocean-100 text-ocean-700 hover:bg-ocean-200",
         ghost: "hover:bg-ocean-50 hover:text-ocean-700",
         link: "text-ocean-600 underline-offset-4 hover:underline",
-        cta: "bg-gradient-to-r from-ocean-500 to-ocean-600 text-white hover:from-ocean-600 hover:to-ocean-700 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all",
+        cta: "bg-ocean-500 text-white hover:bg-ocean-600 transition-colors",
       },
       size: {
         default: "h-10 px-4 py-2",

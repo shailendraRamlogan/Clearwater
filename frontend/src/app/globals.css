@@ -4,16 +4,18 @@
 
 @layer base {
   :root {
-    --font-inter: "Inter", system-ui, sans-serif;
+    --font-nunito: "Nunito", system-ui, sans-serif;
     --font-display: "Playfair Display", Georgia, serif;
   }
 
   html {
     scroll-behavior: smooth;
+    overflow-x: hidden;
   }
 
   body {
     @apply bg-white text-ocean-900;
+    overflow-x: hidden;
   }
 }
 

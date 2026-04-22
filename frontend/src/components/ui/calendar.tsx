@@ -1,99 +1,121 @@
 "use client";
 
-import { format, isBefore, startOfDay, isSameDay } from "date-fns";
+import {
+  format,
+  isBefore,
+  startOfDay,
+  isSameDay,
+  startOfMonth,
+  endOfMonth,
+  eachDayOfInterval,
+  startOfWeek,
+  endOfWeek,
+  addMonths,
+  subMonths,
+} from "date-fns";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 
-interface ModernCalendarProps {
+interface CompactCalendarProps {
   selected?: Date;
   onSelect?: (date: Date) => void;
   disabled?: (date: Date) => boolean;
   className?: string;
 }
 
+const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
 export function ModernCalendar({
   selected,
   onSelect,
   disabled,
   className,
-}: ModernCalendarProps) {
-  const [currentMonth, setCurrentMonth] = useState(selected || new Date());
+}: CompactCalendarProps) {
+  const [monthStart, setMonthStart] = useState(() => startOfMonth(selected || new Date()));
 
-  const year = currentMonth.getFullYear();
-  const month = currentMonth.getMonth();
-  const firstDay = new Date(year, month, 1).getDay();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
   const today = startOfDay(new Date());
-
-  const days: (Date | null)[] = [];
-  for (let i = 0; i < firstDay; i++) days.push(null);
-  for (let d = 1; d <= daysInMonth; d++) days.push(new Date(year, month, d));
-
-  const prevMonth = () => setCurrentMonth(new Date(year, month - 1, 1));
-  const nextMonth = () => setCurrentMonth(new Date(year, month + 1, 1));
+  const calendarStart = startOfWeek(monthStart);
+  const calendarEnd = endOfWeek(endOfMonth(monthStart));
+  const days = eachDayOfInterval({ start: calendarStart, end: calendarEnd });
 
   const isDisabled = (date: Date) => {
     if (disabled) return disabled(date);
     return isBefore(date, today);
   };
 
+  const goBack = () => {
+    const prev = subMonths(monthStart, 1);
+    if (isBefore(prev, startOfMonth(today))) return;
+    setMonthStart(prev);
+  };
+
+  const goForward = () => setMonthStart(addMonths(monthStart, 1));
+  const goToday = () => setMonthStart(startOfMonth(today));
+
+  const monthLabel = format(monthStart, "MMMM yyyy");
+
   return (
-    <div className={cn("select-none", className)}>
+    <div className={cn("w-full", className)}>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <button
-          onClick={prevMonth}
-          className="p-2 rounded-xl hover:bg-ocean-50 transition-colors text-ocean-600"
+          onClick={goBack}
+          className="p-1.5 rounded-lg hover:bg-ocean-50 transition-colors text-ocean-400 hover:text-ocean-600"
         >
-          <ChevronLeft className="h-5 w-5" />
+          <ChevronLeft className="h-4 w-4" />
         </button>
-        <h3 className="text-lg font-semibold text-ocean-900">
-          {format(currentMonth, "MMMM yyyy")}
-        </h3>
+        <button onClick={goToday} className="text-sm font-semibold text-ocean-700 hover:text-ocean-900 transition-colors">
+          {monthLabel}
+        </button>
         <button
-          onClick={nextMonth}
-          className="p-2 rounded-xl hover:bg-ocean-50 transition-colors text-ocean-600"
+          onClick={goForward}
+          className="p-1.5 rounded-lg hover:bg-ocean-50 transition-colors text-ocean-400 hover:text-ocean-600"
         >
-          <ChevronRight className="h-5 w-5" />
+          <ChevronRight className="h-4 w-4" />
         </button>
       </div>
 
       {/* Day labels */}
-      <div className="grid grid-cols-7 gap-1 mb-2">
-        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
+      <div className="grid grid-cols-7 gap-1 mb-1">
+        {DAY_LABELS.map((d) => (
           <div
             key={d}
-            className="text-center text-xs font-medium text-ocean-400 py-2"
+            className="text-center text-[10px] font-medium text-ocean-400 uppercase py-1"
           >
             {d}
           </div>
         ))}
       </div>
 
-      {/* Days */}
+      {/* Date grid */}
       <div className="grid grid-cols-7 gap-1">
-        {days.map((day, i) => {
-          if (!day) return <div key={`blank-${i}`} />;
-
-          const disabled = isDisabled(day);
+        {days.map((day) => {
+          const dis = isDisabled(day);
           const isSelected = selected && isSameDay(day, selected);
           const isToday = isSameDay(day, today);
+          const inMonth = day.getMonth() === monthStart.getMonth();
 
           return (
             <button
               key={day.toISOString()}
-              disabled={disabled}
+              disabled={dis}
               onClick={() => onSelect?.(day)}
               className={cn(
-                "relative w-11 h-11 rounded-full text-sm font-medium transition-all duration-200",
-                disabled && "text-ocean-200 cursor-not-allowed",
-                !disabled && !isSelected && "text-ocean-700 hover:bg-ocean-100",
-                isSelected && "bg-ocean-500 text-white shadow-md shadow-ocean-500/25 hover:bg-ocean-600",
-                isToday && !isSelected && "ring-2 ring-ocean-400 ring-offset-2"
+                "flex flex-col items-center justify-center py-3 sm:py-2 rounded-xl text-xs transition-all duration-200",
+                dis && "text-ocean-200 cursor-not-allowed",
+                !dis && !isSelected && "text-ocean-600 hover:bg-ocean-50",
+                !inMonth && !isSelected && "text-ocean-300",
+                isSelected && "bg-ocean-500 text-white shadow-sm",
+                isToday && !isSelected && "ring-2 ring-ocean-300 ring-offset-1 font-bold"
               )}
             >
-              {format(day, "d")}
+              <span className={cn("text-sm font-medium leading-none", isSelected && "font-bold")}>
+                {format(day, "d")}
+              </span>
+              {isToday && (
+                <span className={cn("w-1 h-1 rounded-full mt-1", isSelected ? "bg-white" : "bg-ocean-400")} />
+              )}
             </button>
           );
         })}
