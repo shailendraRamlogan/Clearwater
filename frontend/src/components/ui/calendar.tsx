@@ -106,7 +106,7 @@ export function ModernCalendar({
                 dis && "text-ocean-200 cursor-not-allowed",
                 !dis && !isSelected && "text-ocean-600 hover:bg-ocean-50",
                 !inMonth && !isSelected && "text-ocean-300",
-                isSelected && "bg-ocean-500 text-white shadow-sm",
+                isSelected && "bg-ocean-700 text-white shadow-sm",
                 isToday && !isSelected && "ring-2 ring-ocean-300 ring-offset-1 font-bold"
               )}
             >

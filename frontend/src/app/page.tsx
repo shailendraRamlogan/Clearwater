@@ -121,7 +121,7 @@ export default function HomePage() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
             <Card className="h-full border border-ocean-100 overflow-hidden">
-              <div className="h-1 bg-ocean-500" />
+              <div className="h-1 bg-ocean-700" />
               <CardHeader className="text-center pb-2">
                 <CardTitle className="text-xl">Adult Tour</CardTitle>
                 <div className="mt-4">
@@ -227,7 +227,7 @@ export default function HomePage() {
               },
             ].map((item, i) => (
               <div key={i} className="text-center">
-                <div className="relative inline-flex items-center justify-center w-16 h-16 bg-ocean-500 text-white rounded-full mb-6">
+                <div className="relative inline-flex items-center justify-center w-16 h-16 bg-ocean-700 text-white rounded-full mb-6">
                   <item.icon className="h-7 w-7" />
                   <span className="absolute -top-1 -right-1 w-7 h-7 bg-sand-400 text-ocean-900 rounded-full flex items-center justify-center text-xs font-bold">
                     {item.step}

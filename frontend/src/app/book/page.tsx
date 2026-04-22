@@ -220,9 +220,9 @@ export default function BookingPage() {
                 <div
                   className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
                     isComplete
-                      ? "bg-ocean-500 text-white"
+                      ? "bg-ocean-700 text-white"
                       : isActive
-                      ? "bg-ocean-500 text-white ring-4 ring-ocean-100"
+                      ? "bg-ocean-700 text-white ring-4 ring-ocean-100"
                       : "bg-ocean-100 text-ocean-400"
                   }`}
                 >
@@ -241,7 +241,7 @@ export default function BookingPage() {
         </div>
         <div className="max-w-2xl mx-auto h-1 bg-ocean-100 rounded-full overflow-hidden">
           <div
-            className="h-full bg-ocean-500 rounded-full transition-all duration-300"
+            className="h-full bg-ocean-700 rounded-full transition-all duration-300"
             style={{ width: `${((store.currentStep - 1) / 4) * 100}%` }}
           />
         </div>
@@ -356,7 +356,7 @@ export default function BookingPage() {
                             </div>
                             <div className="h-1.5 bg-ocean-100 rounded-full overflow-hidden">
                               <div
-                                className="h-full bg-ocean-500 rounded-full transition-all"
+                                className="h-full bg-ocean-700 rounded-full transition-all"
                                 style={{ width: `${pct}%` }}
                               />
                             </div>

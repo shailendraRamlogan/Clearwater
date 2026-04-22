@@ -22,7 +22,7 @@ export function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16 items-center">
           <Link href="/" className="flex items-center gap-2.5 group">
-            <div className="bg-ocean-500 text-white p-2 rounded-lg transition-colors">
+            <div className="bg-ocean-700 text-white p-2 rounded-lg transition-colors">
               <Waves className="h-5 w-5" />
             </div>
             <div className="flex flex-col leading-tight">
@@ -93,7 +93,7 @@ export function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           <div>
             <div className="flex items-center gap-2.5">
-              <div className="bg-ocean-500 text-white p-2 rounded-lg">
+              <div className="bg-ocean-700 text-white p-2 rounded-lg">
                 <Waves className="h-5 w-5" />
               </div>
               <div className="flex flex-col leading-tight">

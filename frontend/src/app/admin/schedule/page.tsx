@@ -108,7 +108,7 @@ export default function AdminSchedule() {
                         : blocked
                         ? "bg-coral-500/10 text-coral-600 font-medium hover:bg-coral-500/20"
                         : selected
-                        ? "bg-ocean-500 text-white"
+                        ? "bg-ocean-700 text-white"
                         : "hover:bg-ocean-50 text-ocean-700"
                     }`}
                   >
