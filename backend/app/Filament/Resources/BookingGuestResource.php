@@ -1,0 +1,67 @@
+<?php
+
+namespace App\Filament\Resources;
+
+use App\Filament\Resources\BookingGuestResource\Pages;
+use App\Models\BookingGuest;
+use Filament\Forms;
+use Filament\Forms\Form;
+use Filament\Resources\Resource;
+use Filament\Tables;
+use Filament\Tables\Table;
+
+class BookingGuestResource extends Resource
+{
+    protected static ?string $model = BookingGuest::class;
+    protected static ?string $navigationIcon = 'heroicon-o-users';
+    protected static ?int $navigationSort = 40;
+
+    public static function form(Form $form): Form
+    {
+        return $form
+            ->schema([
+                Forms\Components\Select::make('booking_id')
+                    ->relationship('booking', 'booking_ref')
+                    ->required()
+                    ->searchable(),
+                Forms\Components\TextInput::make('first_name')->required()->maxLength(255),
+                Forms\Components\TextInput::make('last_name')->required()->maxLength(255),
+                Forms\Components\TextInput::make('email')->email()->maxLength(255),
+                Forms\Components\TextInput::make('phone')->maxLength(255),
+                Forms\Components\Toggle::make('is_primary')->label('Primary Guest'),
+            ]);
+    }
+
+    public static function table(Table $table): Table
+    {
+        return $table
+            ->columns([
+                Tables\Columns\TextColumn::make('booking.booking_ref')->searchable(),
+                Tables\Columns\TextColumn::make('first_name')->searchable(),
+                Tables\Columns\TextColumn::make('last_name')->searchable(),
+                Tables\Columns\TextColumn::make('email'),
+                Tables\Columns\TextColumn::make('phone'),
+                Tables\Columns\IconColumn::make('is_primary')->boolean()->label('Primary'),
+            ])
+            ->filters([
+                Tables\Filters\TernaryFilter::make('is_primary'),
+            ])
+            ->actions([
+                Tables\Actions\EditAction::make(),
+            ])
+            ->bulkActions([
+                Tables\Actions\BulkActionGroup::make([
+                    Tables\Actions\DeleteBulkAction::make(),
+                ]),
+            ]);
+    }
+
+    public static function getPages(): array
+    {
+        return [
+            'index' => Pages\ListBookingGuests::route('/'),
+            'create' => Pages\CreateBookingGuest::route('/create'),
+            'edit' => Pages\EditBookingGuest::route('/{record}/edit'),
+        ];
+    }
+}
