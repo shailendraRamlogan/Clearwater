@@ -49,13 +49,14 @@ const stepLabels = [
 export default function BookingPage() {
   const store = useBookingStore();
   const [loading, setLoading] = useState(false);
-  const [confirmEmail, setConfirmEmail] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [showPayment, setShowPayment] = useState(false);
   const [cardData, setCardData] = useState({ number: "", expiry: "", cvc: "", name: "" });
   const [bookingId, setBookingId] = useState<string | null>(null);
   const [adultExpanded, setAdultExpanded] = useState(false);
   const [childExpanded, setChildExpanded] = useState(false);
+  const [activeGuest, setActiveGuest] = useState(0);
+  const [confirmEmail, setConfirmEmail] = useState("");
   const adultDismissed = useRef(false);
   const childDismissed = useRef(false);
   const lastFetchedDate = useRef<string | null>(null);
@@ -97,12 +98,11 @@ export default function BookingPage() {
 
   const handleBooking = async () => {
     if (!store.selectedDate || !store.selectedSlot) return;
-    if (
-      !store.guest.first_name ||
-      !store.guest.last_name ||
-      !store.guest.email ||
-      !store.guest.phone
-    ) {
+    const allFilled = store.guests.every((g, i) => {
+      if (i === 0) return g.first_name && g.last_name && g.email && g.phone;
+      return g.first_name && g.last_name && g.email;
+    });
+    if (!allFilled) {
       toast.error("Please fill in all guest details.");
       return;
     }
@@ -117,7 +117,7 @@ export default function BookingPage() {
         package_upgrade: store.packageUpgrade,
         special_occasion: store.specialOccasion,
         special_comment: store.specialComment,
-        guest: store.guest,
+        guest: store.guests[0],
       });
       setBookingId(booking.id);
       toast.success("Booking confirmed! Check your email for details.");
@@ -146,7 +146,7 @@ export default function BookingPage() {
           </p>
           <p className="text-ocean-500 mb-8">
             A confirmation email has been sent to{" "}
-            <span className="font-medium">{store.guest.email}</span>
+            <span className="font-medium">{store.guests[0].email}</span>
           </p>
           <div className="bg-ocean-50 rounded-lg p-6 mb-8 text-left">
             <h3 className="font-semibold mb-3">Booking Summary</h3>
@@ -590,105 +590,174 @@ export default function BookingPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-xl sm:text-2xl">Guest Details</CardTitle>
+                <p className="text-ocean-500 text-sm">
+                  {store.totalGuests()} guest{store.totalGuests() !== 1 ? "s" : ""} — fill in details for each
+                </p>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="firstName">First Name</Label>
-                    <Input
-                      id="firstName"
-                      placeholder="John"
-                      value={store.guest.first_name}
-                      onChange={(e) => {
-                        store.setGuest({ first_name: e.target.value });
-                        setErrors(prev => ({ ...prev, first_name: "" }));
+              <CardContent className="space-y-6">
+                {/* Guest Pills */}
+                <div className="flex gap-2 flex-wrap">
+                  {store.guests.map((g, i) => (
+                    <button
+                      key={i}
+                      onClick={() => {
+                        if (i === 0) setConfirmEmail(g.email);
+                        setActiveGuest(i);
+                        setErrors({});
                       }}
-                      className={errors.first_name ? "border-red-400 focus-visible:ring-red-400" : ""}
-                    />
-                    {errors.first_name && <p className="text-xs text-red-500 mt-1">{errors.first_name}</p>}
-                  </div>
-                  <div>
-                    <Label htmlFor="lastName">Last Name</Label>
-                    <Input
-                      id="lastName"
-                      placeholder="Doe"
-                      value={store.guest.last_name}
-                      onChange={(e) => {
-                        store.setGuest({ last_name: e.target.value });
-                        setErrors(prev => ({ ...prev, last_name: "" }));
-                      }}
-                      className={errors.last_name ? "border-red-400 focus-visible:ring-red-400" : ""}
-                    />
-                    {errors.last_name && <p className="text-xs text-red-500 mt-1">{errors.last_name}</p>}
-                  </div>
-                </div>
-                <div>
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="john@example.com"
-                    value={store.guest.email}
-                    onChange={(e) => {
-                      store.setGuest({ email: e.target.value });
-                      setErrors(prev => ({ ...prev, email: "" }));
-                    }}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="confirmEmail">Confirm Email</Label>
-                  <Input
-                    id="confirmEmail"
-                    type="email"
-                    placeholder="john@example.com"
-                    value={confirmEmail}
-                    onChange={(e) => {
-                      setConfirmEmail(e.target.value);
-                      setErrors(prev => ({ ...prev, confirmEmail: "" }));
-                    }}
-                    className={errors.confirmEmail ? "border-red-400 focus-visible:ring-red-400" : ""}
-                  />
-                  {errors.confirmEmail && <p className="text-xs text-red-500 mt-1">{errors.confirmEmail}</p>}
-                </div>
-                <div>
-                  <Label htmlFor="phone">Phone</Label>
-                  <PhoneInput
-                    country={'bs'}
-                    value={store.guest.phone}
-                    onChange={(phone) => store.setGuest({ phone })}
-                    disableCountryCode={false}
-                    disableDropdown={false}
-                    enableAreaCodes={false}
-                    countryCodeEditable={false}
-                    inputClass="!w-full !border-ocean-200 !rounded-lg !py-2 !px-3 !text-sm !h-10 !bg-white focus:!ring-2 focus:!ring-ocean-400 focus:!outline-none !pl-14"
-                    buttonClass="!rounded-l-lg !border-ocean-200 !bg-ocean-50"
-                    dropdownClass="!rounded-lg"
-                    containerClass="!mt-0"
-                    inputProps={{ id: 'phone' }}
-                  />
-                  {errors.phone && <p className="text-xs text-red-500 mt-1">{errors.phone}</p>}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        activeGuest === i
+                          ? "bg-ocean-700 text-white"
+                          : g.first_name
+                            ? "bg-ocean-50 text-ocean-700 hover:bg-ocean-100"
+                            : "bg-ocean-50 text-ocean-400 border border-dashed border-ocean-300"
+                      }`}
+                    >
+                      {g.first_name ? `Guest ${i + 1}: ${g.first_name}` : `Guest ${i + 1}`}
+                    </button>
+                  ))}
                 </div>
 
+                {/* Active Guest Form */}
+                {store.guests[activeGuest] && (
+                  <div key={activeGuest}>
+                    <p className="text-sm font-medium text-ocean-700 mb-3">
+                      {activeGuest === 0 ? "🎫 Primary guest (purchaser)" : `Guest ${activeGuest + 1}`}
+                    </p>
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor={`firstName-${activeGuest}`}>First Name</Label>
+                          <Input
+                            id={`firstName-${activeGuest}`}
+                            placeholder="John"
+                            value={store.guests[activeGuest].first_name}
+                            onChange={(e) => {
+                              store.setGuestField(activeGuest, "first_name", e.target.value);
+                              setErrors((p) => ({ ...p, first_name: "" }));
+                            }}
+                            className={errors.first_name ? "border-red-400 focus-visible:ring-red-400" : ""}
+                          />
+                          {errors.first_name && <p className="text-xs text-red-500 mt-1">{errors.first_name}</p>}
+                        </div>
+                        <div>
+                          <Label htmlFor={`lastName-${activeGuest}`}>Last Name</Label>
+                          <Input
+                            id={`lastName-${activeGuest}`}
+                            placeholder="Doe"
+                            value={store.guests[activeGuest].last_name}
+                            onChange={(e) => {
+                              store.setGuestField(activeGuest, "last_name", e.target.value);
+                              setErrors((p) => ({ ...p, last_name: "" }));
+                            }}
+                            className={errors.last_name ? "border-red-400 focus-visible:ring-red-400" : ""}
+                          />
+                          {errors.last_name && <p className="text-xs text-red-500 mt-1">{errors.last_name}</p>}
+                        </div>
+                      </div>
+                      <div>
+                        <Label htmlFor={`email-${activeGuest}`}>Email</Label>
+                        <Input
+                          id={`email-${activeGuest}`}
+                          type="email"
+                          placeholder="john@example.com"
+                          value={store.guests[activeGuest].email}
+                          onChange={(e) => {
+                            store.setGuestField(activeGuest, "email", e.target.value);
+                            setErrors((p) => ({ ...p, email: "" }));
+                          }}
+                          className={errors.email ? "border-red-400 focus-visible:ring-red-400" : ""}
+                        />
+                        {errors.email && <p className="text-xs text-red-500 mt-1">{errors.email}</p>}
+                      </div>
+
+                      {/* Primary guest only: confirm email + phone */}
+                      {activeGuest === 0 && (
+                        <>
+                          <div>
+                            <Label htmlFor="confirmEmail">Confirm Email</Label>
+                            <Input
+                              id="confirmEmail"
+                              type="email"
+                              placeholder="john@example.com"
+                              value={confirmEmail}
+                              onChange={(e) => {
+                                setConfirmEmail(e.target.value);
+                                setErrors((p) => ({ ...p, confirmEmail: "" }));
+                              }}
+                              className={errors.confirmEmail ? "border-red-400 focus-visible:ring-red-400" : ""}
+                            />
+                            {errors.confirmEmail && <p className="text-xs text-red-500 mt-1">{errors.confirmEmail}</p>}
+                          </div>
+                          <div>
+                            <Label htmlFor="phone">Phone</Label>
+                            <PhoneInput
+                              country={'bs'}
+                              value={store.guests[0].phone}
+                              onChange={(phone) => store.setGuestField(0, "phone", phone)}
+                              disableCountryCode={false}
+                              disableDropdown={false}
+                              enableAreaCodes={false}
+                              countryCodeEditable={false}
+                              inputClass="!w-full !border-ocean-200 !rounded-lg !py-2 !px-3 !text-sm !h-10 !bg-white focus:!ring-2 focus:!ring-ocean-400 focus:!outline-none !pl-14"
+                              buttonClass="!rounded-l-lg !border-ocean-200 !bg-ocean-50"
+                              dropdownClass="!rounded-lg"
+                              containerClass="!mt-0"
+                              inputProps={{ id: 'phone' }}
+                            />
+                            {errors.phone && <p className="text-xs text-red-500 mt-1">{errors.phone}</p>}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Completion indicator */}
+                {(() => {
+                  const done = store.guests.filter((g) => g.first_name && g.last_name && g.email).length;
+                  const total = store.totalGuests();
+                  return done < total ? (
+                    <p className="text-xs text-ocean-400 text-center">
+                      {done} of {total} guests completed
+                    </p>
+                  ) : null;
+                })()}
+
                 <div className="flex justify-between pt-4">
-                  <Button
-                    variant="outline"
-                    onClick={() => store.prevStep()}
-                  >
+                  <Button variant="outline" onClick={() => store.prevStep()}>
                     <ChevronLeft className="mr-2 h-4 w-4" />
                     Back
                   </Button>
                   <Button variant="cta" onClick={() => {
-                    const g = store.guest;
+                    // Validate all guests
                     const errs: Record<string, string> = {};
-                    if (!g.first_name.trim()) errs.first_name = "Required";
-                    if (!g.last_name.trim()) errs.last_name = "Required";
-                    if (!g.email.trim()) errs.email = "Required";
-                    if (!confirmEmail.trim()) errs.confirmEmail = "Required";
-                    if (!g.phone.trim()) errs.phone = "Required";
-                    if (Object.keys(errs).length) { setErrors(errs); return; }
-                    if (g.email !== confirmEmail) { setErrors({ confirmEmail: "Emails do not match" }); return; }
-                    const digits = g.phone.replace(/\D/g, "");
-                    if (digits.length < 7) { setErrors({ phone: "At least 7 digits required" }); return; }
+                    let hasError = false;
+                    let firstErrorIndex = -1;
+
+                    store.guests.forEach((g, i) => {
+                      if (!g.first_name.trim()) { hasError = true; if (firstErrorIndex === -1) { firstErrorIndex = i; errs.first_name = "Required"; } }
+                      if (!g.last_name.trim()) { hasError = true; if (firstErrorIndex === -1) { firstErrorIndex = i; errs.last_name = "Required"; } }
+                      if (!g.email.trim()) { hasError = true; if (firstErrorIndex === -1) { firstErrorIndex = i; errs.email = "Required"; } }
+                    });
+
+                    // Primary guest extra validation
+                    const p = store.guests[0];
+                    if (!confirmEmail.trim()) { hasError = true; if (firstErrorIndex === -1) firstErrorIndex = 0; errs.confirmEmail = "Required"; }
+                    if (!p.phone.trim()) { hasError = true; if (firstErrorIndex === -1) firstErrorIndex = 0; errs.phone = "Required"; }
+                    if (p.email && confirmEmail && p.email !== confirmEmail) { hasError = true; if (firstErrorIndex === -1) firstErrorIndex = 0; errs.confirmEmail = "Emails do not match"; }
+                    const digits = p.phone.replace(/\D/g, "");
+                    if (digits.length < 7) { hasError = true; if (firstErrorIndex === -1) firstErrorIndex = 0; errs.phone = "At least 7 digits required"; }
+
+                    if (hasError) {
+                      if (firstErrorIndex >= 0) {
+                        setActiveGuest(firstErrorIndex);
+                        if (firstErrorIndex === 0) setConfirmEmail(store.guests[0].email);
+                      }
+                      setErrors(errs);
+                      return;
+                    }
+
                     setErrors({});
                     store.nextStep();
                   }}>
@@ -762,13 +831,20 @@ export default function BookingPage() {
                 </div>
 
                 {/* Guest Summary */}
-                <div className="bg-ocean-50 rounded-lg p-6 space-y-2 text-sm">
-                  <h3 className="font-semibold text-lg">Guest</h3>
-                  <p>
-                    {store.guest.first_name} {store.guest.last_name}
-                  </p>
-                  <p>{store.guest.email}</p>
-                  <p>{store.guest.phone}</p>
+                <div className="bg-ocean-50 rounded-lg p-6 space-y-3 text-sm">
+                  <h3 className="font-semibold text-lg">Guests</h3>
+                  {store.guests.map((g, i) => (
+                    <div key={i} className="flex justify-between items-start">
+                      <div>
+                        <span className="font-medium">{g.first_name} {g.last_name}</span>
+                        {i === 0 && <span className="text-ocean-400 ml-2">(primary)</span>}
+                      </div>
+                      <span className="text-ocean-500">{g.email}</span>
+                    </div>
+                  ))}
+                  {store.guests[0]?.phone && (
+                    <p className="text-ocean-500">Phone: {store.guests[0].phone}</p>
+                  )}
                   {store.specialOccasion && (
                     <p className="text-ocean-600 italic">
                       🎉 Special occasion: {store.specialComment || "Not specified"}
