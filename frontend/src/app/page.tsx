@@ -64,7 +64,7 @@ export default function HomePage() {
                 <Button
                   variant="outline"
                   size="xl"
-                  className="border-white/30 text-white hover:bg-white/10"
+                  className="border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white"
                 >
                   Learn More
                 </Button>

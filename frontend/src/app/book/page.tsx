@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { DayPicker } from "react-day-picker";
-import { format, addDays, isBefore, startOfDay } from "date-fns";
+
+import { format } from "date-fns";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronLeft,
@@ -24,6 +24,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useBookingStore } from "@/stores/booking-store";
+import { ModernCalendar } from "@/components/ui/calendar";
 import { getAvailability, createBooking } from "@/lib/booking-service";
 import { formatCurrency, formatTime } from "@/lib/utils";
 import { toast } from "sonner";
@@ -233,18 +234,9 @@ export default function BookingPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="flex justify-center">
-                    <DayPicker
-                      mode="single"
+                    <ModernCalendar
                       selected={store.selectedDate}
-                      onSelect={handleDateSelect}
-                      disabled={(date) => isBefore(date, startOfDay(addDays(new Date(), 1)))}
-                      modifiersStyles={{
-                        selected: {
-                          backgroundColor: "#0284c7",
-                          color: "white",
-                        },
-                      }}
-                      className="mx-auto"
+                      onSelect={(date) => handleDateSelect(date)}
                     />
                   </div>
                   <div className="mt-6 flex justify-end">
