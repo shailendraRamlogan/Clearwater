@@ -198,7 +198,7 @@ export default function GalleryPage() {
             onClick={() => setVisibleCount((prev) => Math.min(prev + PER_PAGE, allImages.length))}
             className="px-8 py-3 border-2 border-ocean-200 text-ocean-700 font-medium rounded-lg hover:bg-ocean-50 hover:border-ocean-300 transition-colors"
           >
-            Load More ({allImages.length - visibleCount} remaining)
+            Load More
           </button>
         </div>
       )}
