@@ -21,6 +21,10 @@ class StoreBookingRequest extends FormRequest
             'guest.last_name' => 'required|string|max:100',
             'guest.email' => 'required|email|max:255',
             'guest.phone' => 'required|string|max:30',
+            'guests' => 'nullable|array',
+            'guests.*.first_name' => 'nullable|string|max:100',
+            'guests.*.last_name' => 'nullable|string|max:100',
+            'guests.*.email' => 'nullable|email|max:255',
         ];
     }
 }

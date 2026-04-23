@@ -52,6 +52,22 @@ class BookingController extends Controller
                 'is_primary' => true,
             ]);
 
+            // Additional guests (optional)
+            if (!empty($validated['guests'])) {
+                foreach ($validated['guests'] as $guest) {
+                    if (!empty($guest['first_name']) && !empty($guest['last_name'])) {
+                        BookingGuest::create([
+                            'booking_id' => $booking->id,
+                            'first_name' => $guest['first_name'],
+                            'last_name' => $guest['last_name'],
+                            'email' => $guest['email'] ?? null,
+                            'phone' => null,
+                            'is_primary' => false,
+                        ]);
+                    }
+                }
+            }
+
             // Ticket items
             if ($validated['adult_count'] > 0) {
                 BookingItem::create([

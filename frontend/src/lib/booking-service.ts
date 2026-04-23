@@ -62,6 +62,8 @@ const MOCK_BOOKINGS: Booking[] = [
     total_price: 725,
     status: "confirmed",
     created_at: new Date(Date.now() - 3600000).toISOString(),
+    is_confirmed: true,
+    needs_confirmation: false,
   },
   {
     id: "BK-D4E5F6",
@@ -78,6 +80,8 @@ const MOCK_BOOKINGS: Booking[] = [
     total_price: 900,
     status: "confirmed",
     created_at: new Date(Date.now() - 7200000).toISOString(),
+    is_confirmed: true,
+    needs_confirmation: false,
   },
   {
     id: "BK-G7H8I9",
@@ -93,6 +97,8 @@ const MOCK_BOOKINGS: Booking[] = [
     total_price: 275,
     status: "pending",
     created_at: new Date(Date.now() - 1800000).toISOString(),
+    is_confirmed: false,
+    needs_confirmation: false,
   },
   {
     id: "BK-J0K1L2",
@@ -109,6 +115,8 @@ const MOCK_BOOKINGS: Booking[] = [
     total_price: 1175,
     status: "confirmed",
     created_at: new Date(Date.now() - 600000).toISOString(),
+    is_confirmed: true,
+    needs_confirmation: false,
   },
 ];
 
@@ -162,6 +170,8 @@ export async function createBooking(payload: {
         payload.child_count * 150 +
         (payload.package_upgrade ? (payload.adult_count + payload.child_count) * 75 : 0),
       status: "confirmed",
+      is_confirmed: true,
+      needs_confirmation: false,
       created_at: new Date().toISOString(),
     };
   }
