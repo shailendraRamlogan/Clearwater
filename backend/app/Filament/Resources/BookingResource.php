@@ -20,40 +20,72 @@ class BookingResource extends Resource
     {
         return $form
             ->schema([
-                Forms\Components\TextInput::make('booking_ref')
-                    ->disabled()
-                    ->dehydrated(false),
-                Forms\Components\DatePicker::make('tour_date')
-                    ->required(),
-                Forms\Components\Select::make('time_slot_id')
-                    ->relationship('timeSlot', 'id')
-                    ->required()
-                    ->searchable()
-                    ->getOptionLabelFromRecordUsing(fn($record) => $record->boat->name . ' ' . $record->start_time),
-                Forms\Components\Select::make('status')
-                    ->required()
-                    ->options([
-                        'pending' => 'Pending',
-                        'confirmed' => 'Confirmed',
-                        'cancelled' => 'Cancelled',
-                        'completed' => 'Completed',
+                Forms\Components\Section::make('Booking Information')
+                    ->schema([
+                        Forms\Components\TextInput::make('booking_ref')
+                            ->label('Reference')
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->columnSpanFull(),
+                        Forms\Components\TextInput::make('tour_date_display')
+                            ->label('Tour Date')
+                            ->formatStateUsing(fn ($record) => $record?->tour_date?->format('F j, Y'))
+                            ->disabled()
+                            ->dehydrated(false),
+                        Forms\Components\TextInput::make('time_slot_display')
+                            ->label('Time Slot')
+                            ->formatStateUsing(fn ($record) => $record && $record->timeSlot
+                                ? $record->timeSlot->boat?->name . ' — ' . \Carbon\Carbon::createFromFormat('H:i:s', $record->timeSlot->start_time)->format('g:i A')
+                                : '—')
+                            ->disabled()
+                            ->dehydrated(false),
+                        Forms\Components\Select::make('status')
+                            ->required()
+                            ->options([
+                                'pending' => 'Pending',
+                                'confirmed' => 'Confirmed',
+                                'cancelled' => 'Cancelled',
+                                'completed' => 'Completed',
+                            ]),
+                    ])
+                    ->columns(2),
+
+                Forms\Components\Section::make('Order Summary')
+                    ->schema([
+                        Forms\Components\TextInput::make('guests_expected')
+                            ->label('Total Guests')
+                            ->formatStateUsing(fn ($record) => $record ? $record->items->sum('quantity') : 0)
+                            ->disabled()
+                            ->dehydrated(false),
+                        Forms\Components\TextInput::make('guests_collected')
+                            ->label('Guests Collected')
+                            ->formatStateUsing(fn ($record) => $record ? $record->guests()->count() : 0)
+                            ->disabled()
+                            ->dehydrated(false),
+                        Forms\Components\TextInput::make('total_price_display')
+                            ->label('Total Price')
+                            ->formatStateUsing(fn ($record) => $record ? '$' . number_format($record->total_price_cents / 100, 2) : '$0.00')
+                            ->disabled()
+                            ->dehydrated(false),
+                        Forms\Components\TextInput::make('photo_upgrade_count')
+                            ->label('Photo Upgrades')
+                            ->disabled()
+                            ->dehydrated(false),
+                    ])
+                    ->columns(2),
+
+                Forms\Components\Section::make('Special Requests')
+                    ->schema([
+                        Forms\Components\TextInput::make('special_occasion')
+                            ->label('Occasion')
+                            ->disabled()
+                            ->dehydrated(false),
+                        Forms\Components\Textarea::make('special_comment')
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->columnSpanFull()
+                            ->rows(3),
                     ]),
-                Forms\Components\TextInput::make('total_guests')
-                    ->numeric(),
-                Forms\Components\TextInput::make('total_price_cents')
-                    ->numeric()
-                    ->label('Total Price (cents)'),
-                Forms\Components\TextInput::make('photo_upgrade_count')
-                    ->numeric()
-                    ->default(0),
-                Forms\Components\TextInput::make('special_occasion')
-                    ->maxLength(255),
-                Forms\Components\Textarea::make('special_comment')
-                    ->maxLength(65535),
-                Forms\Components\Toggle::make('is_confirmed')
-                    ->label('Confirmed'),
-                Forms\Components\Toggle::make('needs_confirmation')
-                    ->label('Needs Confirmation'),
             ]);
     }
 
@@ -65,15 +97,18 @@ class BookingResource extends Resource
                 Tables\Columns\TextColumn::make('tour_date')->date(),
                 Tables\Columns\TextColumn::make('timeSlot.boat.name')->label('Boat'),
                 Tables\Columns\TextColumn::make('timeSlot.start_time')->label('Time'),
-                Tables\Columns\TextColumn::make('status')->badge()->color(fn($state) => match($state) {
-                    'confirmed' => 'success',
-                    'pending' => 'warning',
-                    'cancelled' => 'danger',
-                    'completed' => 'info',
-                    default => 'gray',
-                }),
-                Tables\Columns\TextColumn::make('total_guests')->numeric(),
-                Tables\Columns\TextColumn::make('total_price_cents')->money('usd', divideBy: 100)->label('Total'),
+                Tables\Columns\TextColumn::make('status')
+                    ->badge()
+                    ->color(fn ($state) => match ($state) {
+                        'confirmed' => 'success',
+                        'pending' => 'warning',
+                        'cancelled' => 'danger',
+                        'completed' => 'info',
+                        default => 'gray',
+                    }),
+                Tables\Columns\TextColumn::make('total_price_cents')
+                    ->money('usd', divideBy: 100)
+                    ->label('Total'),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('status')
@@ -83,15 +118,22 @@ class BookingResource extends Resource
                         'cancelled' => 'Cancelled',
                         'completed' => 'Completed',
                     ]),
-                Tables\Filters\Filter::make('tour_date')->form([
-                    Forms\Components\DatePicker::make('from'),
-                    Forms\Components\DatePicker::make('until'),
-                ])->query(fn($query, $data) => $query->when($data['from'], fn($q) => $q->whereDate('tour_date', '>=', $data['from']))
-                    ->when($data['until'], fn($q) => $q->whereDate('tour_date', '<=', $data['until']))),
             ])
             ->actions([
+                Tables\Actions\Action::make('view')
+                    ->label('View')
+                    ->icon('heroicon-o-eye')
+                    ->color('gray')
+                    ->modalHeading(fn ($record) => 'Invoice — ' . $record->booking_ref)
+                    ->modalContent(fn ($record) => view('filament.modals.booking-invoice', ['booking' => $record->load(['guests', 'items', 'timeSlot.boat'])]))
+                    ->modalSubmitAction(fn ($record) => \Filament\Actions\Action::make('download')
+                        ->label('Download PDF')
+                        ->icon('heroicon-o-arrow-down-tray')
+                        ->url(route('invoices.download', $record))
+                        ->openUrlInNewTab()
+                    )
+                    ->modalCancelActionLabel('Close'),
                 Tables\Actions\EditAction::make(),
-                Tables\Actions\ViewAction::make(),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([

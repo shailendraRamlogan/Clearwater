@@ -74,11 +74,7 @@ class Booking extends Model
 
     public function scopeIncomplete($query)
     {
-        return $query->whereHas('items', function ($q) {
-            $q->selectRaw('booking_id')
-              ->groupBy('booking_id')
-              ->havingRaw('SUM(quantity) > (SELECT COUNT(*) FROM booking_guests WHERE booking_guests.booking_id = bookings.id)');
-        });
+        return $query->whereRaw('(SELECT COUNT(*) FROM booking_guests WHERE booking_guests.booking_id = bookings.id) < (SELECT COALESCE(SUM(quantity), 0) FROM booking_items WHERE booking_items.booking_id = bookings.id)');
     }
 
     public function scopeNeedsConfirmation($query)

@@ -17,10 +17,10 @@ class BoatSeeder extends Seeder
         ];
 
         $slots = [
-            ['08:30', '11:00'],
-            ['10:45', '13:15'],
-            ['12:15', '14:45'],
-            ['13:15', '15:45'],
+            ['monday', '08:30', '11:00'],
+            ['monday', '10:45', '13:15'],
+            ['tuesday', '12:15', '14:45'],
+            ['tuesday', '13:15', '15:45'],
         ];
 
         foreach ($boats as $boatData) {
@@ -30,10 +30,11 @@ class BoatSeeder extends Seeder
                 'is_active' => true,
             ]);
 
-            foreach ($slots as [$start, $end]) {
+            foreach ($slots as [$day, $start, $end]) {
                 TimeSlot::create([
                     'id' => (string) Str::uuid(),
                     'boat_id' => $boat->id,
+                    'day' => $day,
                     'start_time' => $start,
                     'end_time' => $end,
                     'max_capacity' => $boat->capacity,

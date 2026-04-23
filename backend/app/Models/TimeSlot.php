@@ -10,12 +10,12 @@ class TimeSlot extends Model
     protected $keyType = 'string';
     public $incrementing = false;
 
-    protected $fillable = ['id', 'boat_id', 'start_time', 'end_time', 'max_capacity', 'is_blocked'];
+    protected $fillable = ['id', 'boat_id', 'day', 'start_time', 'end_time', 'max_capacity', 'is_blocked', 'effective_from', 'effective_until'];
 
     protected $casts = [
-        'start_time' => 'datetime:H:i',
-        'end_time' => 'datetime:H:i',
         'is_blocked' => 'boolean',
+        'effective_from' => 'date',
+        'effective_until' => 'date',
     ];
 
     public function boat()
@@ -36,5 +36,19 @@ class TimeSlot extends Model
             ->sum('total_guests');
 
         return max(0, $this->max_capacity - $used);
+    }
+
+    public function getStartLabelAttribute(): string
+    {
+        $day = $this->day ? ucfirst($this->day) : '';
+        $time = $this->start_time ? \Carbon\Carbon::createFromFormat('H:i:s', $this->start_time)->format('g:i A') : '';
+        return trim("{$day} — {$time}");
+    }
+
+    public function getEndLabelAttribute(): string
+    {
+        $day = $this->day ? ucfirst($this->day) : '';
+        $time = $this->end_time ? \Carbon\Carbon::createFromFormat('H:i:s', $this->end_time)->format('g:i A') : '';
+        return trim("{$day} — {$time}");
     }
 }

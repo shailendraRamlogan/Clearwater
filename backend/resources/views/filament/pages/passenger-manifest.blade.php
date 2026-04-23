@@ -1,0 +1,99 @@
+<x-filament-panels::page>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div>
+            <label class="fi-fo-field-wrp-label inline-flex items-center gap-x-3 mb-1">
+                <span class="text-sm font-medium leading-6 text-gray-950 dark:text-white">Sailing Date</span>
+            </label>
+            <input type="date" wire:model.defer="filter_date" wire:change="onDateChanged($event.target.value)"
+                class="fi-input block w-full border-none py-1.5 text-base text-gray-950 dark:text-white bg-white dark:bg-gray-900 rounded-lg shadow-sm ring-1 ring-gray-950/10 dark:ring-white/10 ps-3 pe-3"
+                id="date-select">
+        </div>
+        <div>
+            <label class="fi-fo-field-wrp-label inline-flex items-center gap-x-3 mb-1">
+                <span class="text-sm font-medium leading-6 text-gray-950 dark:text-white">Vessel</span>
+            </label>
+            <select wire:model.defer="filter_boat_id" wire:change="onBoatChanged($event.target.value)"
+                class="fi-input block w-full border-none py-1.5 text-base text-gray-950 dark:text-white bg-white dark:bg-gray-900 rounded-lg shadow-sm ring-1 ring-gray-950/10 dark:ring-white/10 ps-3 pe-3"
+                id="vessel-select">
+                <option value="">All Vessels</option>
+                @foreach($vessels as $id => $name)
+                    <option value="{{ $id }}">{{ $name }}</option>
+                @endforeach
+            </select>
+        </div>
+        <div>
+            <label class="fi-fo-field-wrp-label inline-flex items-center gap-x-3 mb-1">
+                <span class="text-sm font-medium leading-6 text-gray-950 dark:text-white">Time Slot</span>
+            </label>
+            <select wire:model.defer="filter_time_slot_id"
+                @if(!$filter_date) disabled @endif
+                class="fi-input block w-full border-none py-1.5 text-base text-gray-950 dark:text-white bg-white dark:bg-gray-900 rounded-lg shadow-sm ring-1 ring-gray-950/10 dark:ring-white/10 ps-3 pe-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                id="slot-select">
+                <option value="">All Slots</option>
+                @if($filter_date && empty($timeSlots))
+                    <option value="" disabled>No available time slots</option>
+                @endif
+                @foreach($timeSlots as $id => $label)
+                    <option value="{{ $id }}">{{ $label }}</option>
+                @endforeach
+            </select>
+        </div>
+    </div>
+
+    <div class="flex gap-2 mb-4">
+        <button wire:click="applyFilters" wire:loading.attr="disabled"
+            class="inline-flex items-center gap-x-2 px-3 py-1.5 rounded-lg bg-teal-600 text-white text-sm font-medium shadow-sm hover:bg-teal-700">
+            Apply Filters
+        </button>
+        <button onclick="downloadManifest('csv')"
+            class="inline-flex items-center gap-x-2 px-3 py-1.5 rounded-lg bg-white dark:bg-gray-800 text-sm font-medium text-gray-700 dark:text-gray-300 shadow-sm ring-1 ring-gray-950/10 dark:ring-white/10 hover:bg-gray-50 dark:hover:bg-gray-700">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+            Export CSV
+        </button>
+        <button onclick="downloadManifest('pdf')"
+            class="inline-flex items-center gap-x-2 px-3 py-1.5 rounded-lg bg-white dark:bg-gray-800 text-sm font-medium text-gray-700 dark:text-gray-300 shadow-sm ring-1 ring-gray-950/10 dark:ring-white/10 hover:bg-gray-50 dark:hover:bg-gray-700">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>
+            Export PDF
+        </button>
+    </div>
+
+    <div x-data x-cloak>
+        {{ $this->table }}
+    </div>
+
+    @push('scripts')
+    <script>
+        function downloadManifest(format) {
+            const params = new URLSearchParams();
+            params.append('date', document.getElementById('date-select').value);
+            const boatEl = document.getElementById('vessel-select');
+            if (boatEl && boatEl.value) params.append('boat_id', boatEl.value);
+            const slotEl = document.getElementById('slot-select');
+            if (slotEl && slotEl.value) params.append('time_slot_id', slotEl.value);
+            params.append('format', format);
+
+            fetch('/downloadPassengerManifest', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+                body: params.toString(),
+            })
+            .then(r => r.json())
+            .then(data => {
+                console.log('Manifest export:', data.guests_count, 'guests');
+                const bytes = atob(data.content);
+                const arr = new Uint8Array(bytes.length);
+                for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+                const blob = new Blob([arr], { type: data.mime });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = data.filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            });
+        }
+    </script>
+    @endpush
+</x-filament-panels::page>

@@ -5,16 +5,37 @@ namespace App\Filament\Pages;
 use App\Models\Booking;
 use Filament\Pages\Page;
 use Filament\Tables;
+use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Filament\Actions\Action;
 
 class IncompleteBookings extends Page implements Tables\Contracts\HasTable
 {
     use Tables\Concerns\InteractsWithTable;
 
-    protected static ?string $navigationIcon = 'heroicon-o-user-plus';
-    protected static ?string $navigationLabel = 'Incomplete Bookings';
-    protected static ?int $navigationSort = 31;
     protected static string $view = 'filament.pages.incomplete-bookings';
+
+    protected static ?string $navigationIcon = 'heroicon-o-user-plus';
+    protected static ?string $navigationGroup = 'Guest Management';
+    protected static ?int $navigationSort = 100;
+
+    public function getBreadcrumbs(): array
+    {
+        return [
+            static::getUrl() => 'Incomplete Bookings',
+            'List',
+        ];
+    }
+
+    public function getHeading(): string
+    {
+        return 'Incomplete Bookings';
+    }
+
+    public function getSubheading(): ?string
+    {
+        return 'Bookings where guest information is incomplete.';
+    }
 
     public function table(Table $table): Table
     {
@@ -23,28 +44,31 @@ class IncompleteBookings extends Page implements Tables\Contracts\HasTable
                 Booking::query()
                     ->withCount('guests')
                     ->with(['primaryGuest', 'timeSlot.boat', 'items'])
-                    ->whereHas('items', function ($q) {
-                        $q->selectRaw('booking_id')
-                          ->groupBy('booking_id')
-                          ->havingRaw('SUM(quantity) > (SELECT COUNT(*) FROM booking_guests WHERE booking_guests.booking_id = bookings.id)');
-                    })
+                    ->whereRaw('(SELECT COUNT(*) FROM booking_guests WHERE booking_guests.booking_id = bookings.id) < (SELECT COALESCE(SUM(quantity), 0) FROM booking_items WHERE booking_items.booking_id = bookings.id)')
                     ->whereIn('status', ['pending', 'confirmed'])
                     ->latest()
             )
             ->columns([
-                Tables\Columns\TextColumn::make('booking_ref')->searchable(),
-                Tables\Columns\TextColumn::make('primaryGuest.full_name')->label('Purchaser')->default('—'),
-                Tables\Columns\TextColumn::make('tour_date')->date(),
-                Tables\Columns\TextColumn::make('timeSlot.start_time')->label('Time'),
-                Tables\Columns\TextColumn::make('guests_count')
-                    ->label('Guests Collected')
+                TextColumn::make('booking_ref')->searchable()->sortable(),
+                TextColumn::make('primaryGuest.full_name')->label('Purchaser')->default('—'),
+                TextColumn::make('tour_date')->date()->sortable(),
+                TextColumn::make('timeSlot.start_time')->label('Time'),
+                TextColumn::make('timeSlot.boat.name')->label('Boat'),
+                TextColumn::make('guests_count')
+                    ->label('Guests')
+                    ->badge()
+                    ->color(fn ($record) => $record->guests_count >= $record->items->sum('quantity') ? 'success' : 'warning')
                     ->formatStateUsing(fn ($record) => "{$record->guests_count} / {$record->items->sum('quantity')}"),
+                TextColumn::make('status')->badge(),
             ])
             ->actions([
-                Tables\Actions\Action::make('edit')
-                    ->label('Edit')
-                    ->url(fn (Booking $record) => route('filament.admin.resources.bookings.edit', $record)),
+                Tables\Actions\Action::make('manage')
+                    ->url(fn ($record) => ManageGuests::getUrl(['record' => $record->id]))
+                    ->icon('heroicon-o-pencil')
+                    ->label('Manage Guests'),
             ])
-            ->emptyStateHeading('All bookings have complete guest details');
+            ->emptyStateHeading('No incomplete bookings')
+            ->emptyStateDescription('All bookings have complete guest information.')
+            ->paginated(10);
     }
 }

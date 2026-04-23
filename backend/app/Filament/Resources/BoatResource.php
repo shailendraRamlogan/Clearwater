@@ -13,7 +13,7 @@ use Filament\Tables\Table;
 class BoatResource extends Resource
 {
     protected static ?string $model = Boat::class;
-    protected static ?string $navigationIcon = 'heroicon-o-ship';
+    protected static ?string $navigationIcon = 'heroicon-o-globe-americas';
     protected static ?int $navigationSort = 10;
 
     public static function form(Form $form): Form

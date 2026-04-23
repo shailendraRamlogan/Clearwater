@@ -1,107 +1,113 @@
-<div>
-    <div class="fi-section">
-        <div class="fi-section-header">
-            <h3 class="fi-section-header-heading">Guest Details</h3>
-            <p class="text-sm text-gray-500">
-                {{ $expectedGuestCount }} guest{{ $expectedGuestCount !== 1 ? 's' : '' }} expected —
-                {{ count(array_filter($guestIds)) }} collected
-            </p>
-        </div>
-
+<div class="space-y-4">
+    @if($expectedGuestCount === 0)
+        <p class="text-sm text-gray-500 dark:text-gray-400 italic">No tickets found for this booking.</p>
+    @else
         {{-- Pill Tabs --}}
         <div class="flex flex-wrap gap-2 mb-4">
             @foreach(range(0, $expectedGuestCount - 1) as $i)
                 @php
-                    $hasData = !empty($guests[$i]['first_name']) || !empty($guests[$i]['last_name']);
+                    $hasName = !empty(trim($guests[$i]['first_name'] ?? '')) || !empty(trim($guests[$i]['last_name'] ?? ''));
                     $isActive = $activeGuestIndex === $i;
                 @endphp
                 <button
                     wire:click="selectGuest({{ $i }})"
-                    class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors
-                    {{ $isActive ? 'bg-teal-600 text-white' : ($hasData ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-gray-100 text-gray-500 border border-dashed border-gray-300 hover:border-gray-400') }}"
+                    class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer
+                        {{ $isActive
+                            ? 'bg-teal-600 text-white dark:bg-teal-500'
+                            : ($hasName
+                                ? 'bg-teal-100 text-teal-800 border border-teal-200 hover:bg-teal-200 dark:bg-teal-900/40 dark:text-teal-300 dark:border-teal-800 dark:hover:bg-teal-900/60'
+                                : 'bg-gray-100 border-2 border-dashed border-gray-300 text-gray-500 hover:border-teal-400 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:border-teal-500')
+                        }}"
                 >
-                    <span class="w-2 h-2 rounded-full {{ $hasData ? 'bg-green-500' : 'bg-gray-300' }}"></span>
-                    Guest {{ $i + 1 }}
-                    {{ $i === 0 ? '(Primary)' : '' }}
+                    <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold
+                        {{ $isActive ? 'bg-white text-teal-600 dark:bg-gray-900 dark:text-teal-400' : ($hasName ? 'bg-teal-600 text-white dark:bg-teal-700' : 'bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400') }}">
+                        {{ $i + 1 }}
+                    </span>
+                    @if($hasName)
+                        {{ trim(($guests[$i]['first_name'] ?? '') . ' ' . ($guests[$i]['last_name'] ?? '')) }}
+                    @else
+                        {{ $i === 0 ? 'Purchaser' : 'Guest ' . ($i + 1) }}
+                    @endif
+                    @if($i === 0)
+                        <span class="text-xs opacity-75">★</span>
+                    @endif
                 </button>
             @endforeach
         </div>
 
-        {{-- Guest Form --}}
-        @isset($guests[$activeGuestIndex])
-            <div class="space-y-3">
-                <p class="text-sm font-medium text-gray-700">
-                    {{ $activeGuestIndex === 0 ? 'Primary Guest (Purchaser)' : 'Guest ' . ($activeGuestIndex + 1) . (empty($guestIds[$activeGuestIndex]) ? ' — Not yet collected' : '') }}
-                </p>
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">First Name</label>
-                        <input
-                            type="text"
-                            wire:model.live="guests.{{ $activeGuestIndex }}.first_name"
-                            class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-teal-600 focus:ring-2 focus:ring-teal-600 focus:outline-none"
-                            placeholder="First name"
-                        />
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
-                        <input
-                            type="text"
-                            wire:model.live="guests.{{ $activeGuestIndex }}.last_name"
-                            class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-teal-600 focus:ring-2 focus:ring-teal-600 focus:outline-none"
-                            placeholder="Last name"
-                        />
-                    </div>
+        {{-- Active Guest Form --}}
+        <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+            <h4 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-1">
+                {{ $activeGuestIndex === 0 ? 'Primary Purchaser' : 'Guest ' . ($activeGuestIndex + 1) }}
+            </h4>
+            @if($activeGuestIndex === 0)
+                <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">The primary contact for this booking.</p>
+            @else
+                <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">Optional guest details. Leave blank if not yet collected.</p>
+            @endif
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">First Name</label>
+                    <input
+                        type="text"
+                        wire:model.live="guests.{{ $activeGuestIndex }}.first_name"
+                        class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm focus:border-teal-500 focus:ring-1 focus:ring-teal-500 outline-none placeholder-gray-400 dark:placeholder-gray-500"
+                        placeholder="First name"
+                    />
                 </div>
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                        <input
-                            type="email"
-                            wire:model.live="guests.{{ $activeGuestIndex }}.email"
-                            class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-teal-600 focus:ring-2 focus:ring-teal-600 focus:outline-none"
-                            placeholder="email@example.com"
-                        />
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                        <input
-                            type="text"
-                            wire:model.live="guests.{{ $activeGuestIndex }}.phone"
-                            class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-teal-600 focus:ring-2 focus:ring-teal-600 focus:outline-none"
-                            placeholder="+1 242 555-0000"
-                        />
-                    </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Last Name</label>
+                    <input
+                        type="text"
+                        wire:model.live="guests.{{ $activeGuestIndex }}.last_name"
+                        class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm focus:border-teal-500 focus:ring-1 focus:ring-teal-500 outline-none placeholder-gray-400 dark:placeholder-gray-500"
+                        placeholder="Last name"
+                    />
                 </div>
-                <div class="flex gap-2 pt-2">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
+                    <input
+                        type="email"
+                        wire:model.live="guests.{{ $activeGuestIndex }}.email"
+                        class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm focus:border-teal-500 focus:ring-1 focus:ring-teal-500 outline-none placeholder-gray-400 dark:placeholder-gray-500"
+                        placeholder="email@example.com"
+                    />
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Phone</label>
+                    <input
+                        type="text"
+                        wire:model.live="guests.{{ $activeGuestIndex }}.phone"
+                        class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm focus:border-teal-500 focus:ring-1 focus:ring-teal-500 outline-none placeholder-gray-400 dark:placeholder-gray-500"
+                        placeholder="+1 242 555-0000"
+                    />
+                </div>
+            </div>
+
+            <div class="flex gap-3 mt-6">
+                @if($activeGuestIndex < $expectedGuestCount - 1)
                     <button
                         wire:click="saveGuest"
-                        class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-teal-600 text-white text-sm font-medium hover:bg-teal-700 transition-colors"
+                        class="px-4 py-2 bg-teal-600 dark:bg-teal-500 text-white rounded-lg text-sm font-medium hover:bg-teal-700 dark:hover:bg-teal-600 transition-colors cursor-pointer"
                     >
                         Save Guest
                     </button>
-                    @if($activeGuestIndex < $expectedGuestCount - 1)
-                        <button
-                            wire:click="saveAndNext"
-                            class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-white border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors"
-                        >
-                            Save & Next
-                        </button>
-                    @endif
-                </div>
+                    <button
+                        wire:click="saveAndNext"
+                        class="px-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors cursor-pointer"
+                    >
+                        Save & Next
+                    </button>
+                @else
+                    <button
+                        wire:click="saveAndFinish"
+                        class="px-4 py-2 bg-teal-600 dark:bg-teal-500 text-white rounded-lg text-sm font-medium hover:bg-teal-700 dark:hover:bg-teal-600 transition-colors cursor-pointer"
+                    >
+                        Save & Finish
+                    </button>
+                @endif
             </div>
-        @endisset
-    </div>
-
-    @script
-        <script>
-            document.addEventListener('livewire:notify', (event) => {
-                const { type, message } = event.detail;
-                // Use Filament's built-in notification if available
-                if (window.Filament && window.Filament.notify) {
-                    window.Filament.notify({ type, message });
-                }
-            });
-        </script>
-    @endscript
+        </div>
+    @endif
 </div>
