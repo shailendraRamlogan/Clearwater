@@ -36,7 +36,7 @@ export function Navbar() {
               { label: "About", id: "about" },
               { label: "Pricing", id: "pricing" },
               { label: "Gallery", href: "/gallery" },
-            ].map((item, i) => (
+            ].map((item) => (
               item.href ? (
                 <Link key={item.label} href={item.href} className="text-sm font-medium text-ocean-700 hover:text-ocean-900 hover:bg-ocean-50 px-4 py-2 rounded-lg transition-colors">
                   {item.label}

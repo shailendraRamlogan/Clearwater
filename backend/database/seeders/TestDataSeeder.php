@@ -34,8 +34,23 @@ class TestDataSeeder extends Seeder
         $usedEmails = [];
         $bookings = [];
 
+        // Get available days from slots
+        $availableDays = $slots->pluck('day')->unique()->values()->toArray();
+
         for ($i = 0; $i < $bookingCount; $i++) {
-            $slot = $slots->random();
+            // Pick a random day that has slots, then find the next occurrence
+            $targetDay = $availableDays[array_rand($availableDays)];
+            $daysOffset = 0;
+            do {
+                $daysOffset++;
+                $tourDate = now()->addDays($daysOffset)->toDateString();
+                $tourDay = strtolower(now()->addDays($daysOffset)->format('l'));
+            } while ($tourDay !== $targetDay && $daysOffset < 60);
+
+            // Pick a slot that matches the tour date's day-of-week
+            $matchingSlots = $slots->where('day', $tourDay);
+            $slot = $matchingSlots->isNotEmpty() ? $matchingSlots->random() : $slots->random();
+
             $firstName = $firstNames[array_rand($firstNames)];
             $lastName = $lastNames[array_rand($lastNames)];
             $email = strtolower($firstName . '.' . $lastName . '@' . $domains[array_rand($domains)]);
@@ -50,9 +65,6 @@ class TestDataSeeder extends Seeder
             }
             $usedEmails[] = $email;
 
-            // Random date within next 60 days
-            $daysOffset = rand(1, 60);
-            $tourDate = now()->addDays($daysOffset)->toDateString();
             $status = $statuses[array_rand($statuses)];
 
             // Generate booking ref
@@ -156,11 +168,17 @@ class TestDataSeeder extends Seeder
         }
 
         // Create some bookings specifically for today/tomorrow for manifest testing
-        $todaySlot = $slots->where('day', strtolower(now()->format('l')))->first() ?? $slots->first();
-        $tomorrowSlot = $slots->random();
+        $todaySlot = $slots->where('day', strtolower(now()->format('l')))->first();
+        $tomorrowDay = strtolower(now()->addDay()->format('l'));
+        $tomorrowSlot = $slots->where('day', $tomorrowDay)->first();
 
-        foreach ([$todaySlot, $tomorrowSlot] as $idx => $mSlot) {
-            $mDate = $idx === 0 ? now()->toDateString() : now()->addDay()->toDateString();
+        $manifestSlots = [];
+        if ($todaySlot) $manifestSlots[] = ['slot' => $todaySlot, 'date' => now()->toDateString()];
+        if ($tomorrowSlot) $manifestSlots[] = ['slot' => $tomorrowSlot, 'date' => now()->addDay()->toDateString()];
+
+        foreach ($manifestSlots as $entry) {
+            $mSlot = $entry['slot'];
+            $mDate = $entry['date'];
             for ($b = 0; $b < 5; $b++) {
                 $mFirst = $firstNames[array_rand($firstNames)];
                 $mLast = $lastNames[array_rand($lastNames)];

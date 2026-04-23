@@ -39,6 +39,8 @@ class BoatSeeder extends Seeder
                     'end_time' => $end,
                     'max_capacity' => $boat->capacity,
                     'is_blocked' => false,
+                    'effective_from' => now()->startOfYear()->toDateString(),
+                    'effective_until' => now()->endOfYear()->toDateString(),
                 ]);
             }
         }
