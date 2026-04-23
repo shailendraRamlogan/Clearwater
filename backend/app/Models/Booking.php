@@ -13,11 +13,13 @@ class Booking extends Model
     protected $fillable = [
         'id', 'booking_ref', 'tour_date', 'time_slot_id', 'status',
         'photo_upgrade_count', 'special_occasion', 'special_comment',
-        'total_price_cents',
+        'total_price_cents', 'is_confirmed', 'needs_confirmation',
     ];
 
     protected $casts = [
         'tour_date' => 'date',
+        'is_confirmed' => 'boolean',
+        'needs_confirmation' => 'boolean',
     ];
 
     protected static function booted(): void
@@ -62,5 +64,25 @@ class Booking extends Model
     public function primaryGuest()
     {
         return $this->hasOne(BookingGuest::class)->where('is_primary', true);
+    }
+
+    public function isComplete(): bool
+    {
+        $expectedGuests = $this->items()->sum('quantity');
+        return $this->guests()->count() >= $expectedGuests;
+    }
+
+    public function scopeIncomplete($query)
+    {
+        return $query->whereHas('items', function ($q) {
+            $q->selectRaw('booking_id')
+              ->groupBy('booking_id')
+              ->havingRaw('SUM(quantity) > (SELECT COUNT(*) FROM booking_guests WHERE booking_guests.booking_id = bookings.id)');
+        });
+    }
+
+    public function scopeNeedsConfirmation($query)
+    {
+        return $query->where('needs_confirmation', true)->where('is_confirmed', false);
     }
 }

@@ -50,6 +50,10 @@ class BookingResource extends Resource
                     ->maxLength(255),
                 Forms\Components\Textarea::make('special_comment')
                     ->maxLength(65535),
+                Forms\Components\Toggle::make('is_confirmed')
+                    ->label('Confirmed'),
+                Forms\Components\Toggle::make('needs_confirmation')
+                    ->label('Needs Confirmation'),
             ]);
     }
 
