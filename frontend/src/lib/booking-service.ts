@@ -140,6 +140,7 @@ export async function createBooking(payload: {
   special_occasion: boolean;
   special_comment: string;
   guest: { first_name: string; last_name: string; email: string; phone: string };
+  guests: { first_name: string; last_name: string; email: string; phone: string }[];
 }): Promise<Booking> {
   if (USE_MOCK) {
     await delay(1200);

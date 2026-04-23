@@ -38,6 +38,8 @@ export interface Booking {
   special_comment: string;
   total_price: number;
   status: "pending" | "confirmed" | "cancelled";
+  is_confirmed: boolean;
+  needs_confirmation: boolean;
   created_at: string;
 }
 

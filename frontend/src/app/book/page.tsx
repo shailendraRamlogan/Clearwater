@@ -98,12 +98,9 @@ export default function BookingPage() {
 
   const handleBooking = async () => {
     if (!store.selectedDate || !store.selectedSlot) return;
-    const allFilled = store.guests.every((g, i) => {
-      if (i === 0) return g.first_name && g.last_name && g.email && g.phone;
-      return g.first_name && g.last_name && g.email;
-    });
-    if (!allFilled) {
-      toast.error("Please fill in all guest details.");
+    const p = store.guests[0];
+    if (!p.first_name || !p.last_name || !p.email || !p.phone) {
+      toast.error("Please complete the primary guest details.");
       return;
     }
 
@@ -118,6 +115,7 @@ export default function BookingPage() {
         special_occasion: store.specialOccasion,
         special_comment: store.specialComment,
         guest: store.guests[0],
+        guests: store.guests.filter((g) => g.first_name && g.last_name),
       });
       setBookingId(booking.id);
       toast.success("Booking confirmed! Check your email for details.");
@@ -591,38 +589,52 @@ export default function BookingPage() {
               <CardHeader>
                 <CardTitle className="text-xl sm:text-2xl">Guest Details</CardTitle>
                 <p className="text-ocean-500 text-sm">
-                  {store.totalGuests()} guest{store.totalGuests() !== 1 ? "s" : ""} — fill in details for each
+                  {store.totalGuests()} guest{store.totalGuests() !== 1 ? "s" : ""} — primary guest is required, others are optional
                 </p>
               </CardHeader>
               <CardContent className="space-y-6">
                 {/* Guest Pills */}
                 <div className="flex gap-2 flex-wrap">
-                  {store.guests.map((g, i) => (
+                  {store.guests.map((g, i) => {
+                    const isFilled = !!(g.first_name && g.last_name && g.email);
+                    return (
+                      <button
+                        key={i}
+                        onClick={() => {
+                          if (i === 0) setConfirmEmail(g.email);
+                          setActiveGuest(i);
+                          setErrors({});
+                        }}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          activeGuest === i
+                            ? "bg-ocean-700 text-white"
+                            : isFilled
+                              ? "bg-ocean-50 text-ocean-700 hover:bg-ocean-100"
+                              : i === 0
+                                ? "bg-ocean-50 text-ocean-400 border border-dashed border-ocean-300"
+                                : "bg-ocean-50 text-ocean-400 border border-dashed border-ocean-200"
+                        }`}
+                      >
+                        {g.first_name ? `Guest ${i + 1}: ${g.first_name}` : `Guest ${i + 1}`}
+                        {i > 0 && <span className="ml-1 text-xs opacity-70">Optional</span>}
+                      </button>
+                    );
+                  })}
+                  {store.missingGuestCount() > 0 && (
                     <button
-                      key={i}
-                      onClick={() => {
-                        if (i === 0) setConfirmEmail(g.email);
-                        setActiveGuest(i);
-                        setErrors({});
-                      }}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                        activeGuest === i
-                          ? "bg-ocean-700 text-white"
-                          : g.first_name
-                            ? "bg-ocean-50 text-ocean-700 hover:bg-ocean-100"
-                            : "bg-ocean-50 text-ocean-400 border border-dashed border-ocean-300"
-                      }`}
+                      onClick={() => store.addGuest()}
+                      className="px-4 py-2 rounded-lg text-sm font-medium text-ocean-500 border border-dashed border-ocean-300 hover:border-ocean-500 hover:text-ocean-700 transition-colors"
                     >
-                      {g.first_name ? `Guest ${i + 1}: ${g.first_name}` : `Guest ${i + 1}`}
+                      + Add Guest
                     </button>
-                  ))}
+                  )}
                 </div>
 
                 {/* Active Guest Form */}
                 {store.guests[activeGuest] && (
                   <div key={activeGuest}>
                     <p className="text-sm font-medium text-ocean-700 mb-3">
-                      {activeGuest === 0 ? "🎫 Primary guest (purchaser)" : `Guest ${activeGuest + 1}`}
+                      {activeGuest === 0 ? "🎫 Primary guest (purchaser)" : `Guest ${activeGuest + 1} (optional)`}
                     </p>
                     <div className="space-y-4">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -717,7 +729,12 @@ export default function BookingPage() {
                 {(() => {
                   const done = store.guests.filter((g) => g.first_name && g.last_name && g.email).length;
                   const total = store.totalGuests();
-                  return done < total ? (
+                  const missing = store.missingGuestCount();
+                  return missing > 0 ? (
+                    <p className="text-xs text-ocean-400 text-center">
+                      {done} of {total} guests completed — {missing} remaining (optional)
+                    </p>
+                  ) : done < total ? (
                     <p className="text-xs text-ocean-400 text-center">
                       {done} of {total} guests completed
                     </p>
@@ -729,41 +746,67 @@ export default function BookingPage() {
                     <ChevronLeft className="mr-2 h-4 w-4" />
                     Back
                   </Button>
-                  <Button variant="cta" onClick={() => {
-                    // Validate all guests
-                    const errs: Record<string, string> = {};
-                    let hasError = false;
-                    let firstErrorIndex = -1;
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => {
+                      // Only validate guest 1
+                      const errs: Record<string, string> = {};
+                      const p = store.guests[0];
+                      if (!p.first_name.trim()) errs.first_name = "Required";
+                      if (!p.last_name.trim()) errs.last_name = "Required";
+                      if (!p.email.trim()) errs.email = "Required";
+                      if (!confirmEmail.trim()) errs.confirmEmail = "Required";
+                      if (!p.phone.trim()) errs.phone = "Required";
+                      if (p.email && confirmEmail && p.email !== confirmEmail) errs.confirmEmail = "Emails do not match";
+                      const digits = p.phone.replace(/\D/g, "");
+                      if (digits.length < 7) errs.phone = "At least 7 digits required";
 
-                    store.guests.forEach((g, i) => {
-                      if (!g.first_name.trim()) { hasError = true; if (firstErrorIndex === -1) { firstErrorIndex = i; errs.first_name = "Required"; } }
-                      if (!g.last_name.trim()) { hasError = true; if (firstErrorIndex === -1) { firstErrorIndex = i; errs.last_name = "Required"; } }
-                      if (!g.email.trim()) { hasError = true; if (firstErrorIndex === -1) { firstErrorIndex = i; errs.email = "Required"; } }
-                    });
-
-                    // Primary guest extra validation
-                    const p = store.guests[0];
-                    if (!confirmEmail.trim()) { hasError = true; if (firstErrorIndex === -1) firstErrorIndex = 0; errs.confirmEmail = "Required"; }
-                    if (!p.phone.trim()) { hasError = true; if (firstErrorIndex === -1) firstErrorIndex = 0; errs.phone = "Required"; }
-                    if (p.email && confirmEmail && p.email !== confirmEmail) { hasError = true; if (firstErrorIndex === -1) firstErrorIndex = 0; errs.confirmEmail = "Emails do not match"; }
-                    const digits = p.phone.replace(/\D/g, "");
-                    if (digits.length < 7) { hasError = true; if (firstErrorIndex === -1) firstErrorIndex = 0; errs.phone = "At least 7 digits required"; }
-
-                    if (hasError) {
-                      if (firstErrorIndex >= 0) {
-                        setActiveGuest(firstErrorIndex);
-                        if (firstErrorIndex === 0) setConfirmEmail(store.guests[0].email);
+                      if (Object.keys(errs).length > 0) {
+                        setActiveGuest(0);
+                        setConfirmEmail(store.guests[0].email);
+                        setErrors(errs);
+                        return;
                       }
-                      setErrors(errs);
-                      return;
-                    }
+                      setErrors({});
+                      store.nextStep();
+                    }}>
+                      Continue to Review
+                    </Button>
+                    <Button variant="cta" onClick={() => {
+                      // Validate all guests
+                      const errs: Record<string, string> = {};
+                      let hasError = false;
+                      let firstErrorIndex = -1;
 
-                    setErrors({});
-                    store.nextStep();
-                  }}>
-                    Review & Pay
-                    <ChevronRight className="ml-2 h-4 w-4" />
-                  </Button>
+                      store.guests.forEach((g, i) => {
+                        if (!g.first_name.trim()) { hasError = true; if (firstErrorIndex === -1) { firstErrorIndex = i; errs.first_name = "Required"; } }
+                        if (!g.last_name.trim()) { hasError = true; if (firstErrorIndex === -1) { firstErrorIndex = i; errs.last_name = "Required"; } }
+                        if (!g.email.trim()) { hasError = true; if (firstErrorIndex === -1) { firstErrorIndex = i; errs.email = "Required"; } }
+                      });
+
+                      // Primary guest extra validation
+                      const p = store.guests[0];
+                      if (!confirmEmail.trim()) { hasError = true; if (firstErrorIndex === -1) firstErrorIndex = 0; errs.confirmEmail = "Required"; }
+                      if (!p.phone.trim()) { hasError = true; if (firstErrorIndex === -1) firstErrorIndex = 0; errs.phone = "Required"; }
+                      if (p.email && confirmEmail && p.email !== confirmEmail) { hasError = true; if (firstErrorIndex === -1) firstErrorIndex = 0; errs.confirmEmail = "Emails do not match"; }
+                      const digits = p.phone.replace(/\D/g, "");
+                      if (digits.length < 7) { hasError = true; if (firstErrorIndex === -1) firstErrorIndex = 0; errs.phone = "At least 7 digits required"; }
+
+                      if (hasError) {
+                        if (firstErrorIndex >= 0) {
+                          setActiveGuest(firstErrorIndex);
+                          if (firstErrorIndex === 0) setConfirmEmail(store.guests[0].email);
+                        }
+                        setErrors(errs);
+                        return;
+                      }
+
+                      setErrors({});
+                      store.nextStep();
+                    }}>
+                      Review & Pay
+                      <ChevronRight className="ml-2 h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -834,6 +877,7 @@ export default function BookingPage() {
                 <div className="bg-ocean-50 rounded-lg p-6 space-y-3 text-sm">
                   <h3 className="font-semibold text-lg">Guests</h3>
                   {store.guests.map((g, i) => (
+                    g.first_name && g.last_name ? (
                     <div key={i} className="flex justify-between items-start">
                       <div>
                         <span className="font-medium">{g.first_name} {g.last_name}</span>
@@ -841,7 +885,13 @@ export default function BookingPage() {
                       </div>
                       <span className="text-ocean-500">{g.email}</span>
                     </div>
+                    ) : null
                   ))}
+                  {store.missingGuestCount() > 0 && (
+                    <p className="text-amber-600 text-xs mt-2">
+                      ⚠ {store.missingGuestCount()} guest detail{store.missingGuestCount() !== 1 ? "s" : ""} to be collected later
+                    </p>
+                  )}
                   {store.guests[0]?.phone && (
                     <p className="text-ocean-500">Phone: {store.guests[0].phone}</p>
                   )}

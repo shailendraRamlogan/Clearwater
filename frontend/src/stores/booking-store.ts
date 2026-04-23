@@ -44,6 +44,7 @@ interface BookingState {
   getTotal: () => number;
   getItems: () => BookingItem[];
   totalGuests: () => number;
+  missingGuestCount: () => number;
 
   // Reset
   reset: () => void;
@@ -79,29 +80,8 @@ export const useBookingStore = create<BookingState>((set, get) => ({
   setSelectedDate: (date) => set({ selectedDate: date, selectedSlot: undefined }),
   setSelectedSlot: (slot) => set({ selectedSlot: slot }),
   setAvailableSlots: (slots) => set({ availableSlots: slots }),
-  setAdultCount: (count) => {
-    const newCount = Math.max(0, count);
-    set((state) => {
-      const total = newCount + state.childCount;
-      // Ensure guest count matches ticket count
-      let guests = [...state.guests];
-      while (guests.length < total && total > 0) guests.push(emptyGuest());
-      if (total === 0) guests = [emptyGuest()];
-      else guests = guests.slice(0, total);
-      return { adultCount: newCount, guests };
-    });
-  },
-  setChildCount: (count) => {
-    const newCount = Math.max(0, count);
-    set((state) => {
-      const total = state.adultCount + newCount;
-      let guests = [...state.guests];
-      while (guests.length < total && total > 0) guests.push(emptyGuest());
-      if (total === 0) guests = [emptyGuest()];
-      else guests = guests.slice(0, total);
-      return { childCount: newCount, guests };
-    });
-  },
+  setAdultCount: (count) => set({ adultCount: Math.max(0, count) }),
+  setChildCount: (count) => set({ childCount: Math.max(0, count) }),
   setPackageUpgrade: (upgrade) => set({ packageUpgrade: upgrade }),
   setSpecialOccasion: (occasion) => set({ specialOccasion: occasion }),
   setSpecialComment: (comment) => set({ specialComment: comment }),
@@ -147,6 +127,7 @@ export const useBookingStore = create<BookingState>((set, get) => ({
   },
 
   totalGuests: () => get().adultCount + get().childCount,
+  missingGuestCount: () => Math.max(0, (get().adultCount + get().childCount) - get().guests.length),
 
   reset: () => set(initialState),
 }));
