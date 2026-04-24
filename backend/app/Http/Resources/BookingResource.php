@@ -40,6 +40,7 @@ class BookingResource extends JsonResource
             }),
             'status' => $this->status,
             'is_confirmed' => $this->status === 'confirmed',
+            'complete_guests_count' => $this->whenLoaded('guests', fn () => 1 + $this->guests->where('is_primary', false)->where('last_name', '!=', '')->where('email', '!=', '')->count()),
             'needs_confirmation' => $this->status === 'pending',
             'created_at' => $this->created_at?->toIso8601String(),
         ];

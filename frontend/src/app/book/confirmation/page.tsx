@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { format } from "date-fns";
-import { CheckCircle, ArrowLeft } from "lucide-react";
+import { CheckCircle, ArrowLeft, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatCurrency, formatTime } from "@/lib/utils";
@@ -25,6 +25,7 @@ interface BookingLookup {
   package_upgrade: boolean;
   special_occasion: boolean;
   special_comment: string;
+  complete_guests_count: number;
 }
 
 function BookingConfirmationContent() {
@@ -57,6 +58,7 @@ function BookingConfirmationContent() {
           grand_total: b.grand_total,
           fees_breakdown: b.fees_breakdown || [],
           status: b.status,
+          complete_guests_count: b.complete_guests_count || 0,
           package_upgrade: b.package_upgrade,
           special_occasion: b.special_occasion,
           special_comment: b.special_comment,
@@ -179,15 +181,32 @@ function BookingConfirmationContent() {
           </CardContent>
         </Card>
 
-        <Button
-          variant="outline"
-          onClick={() => {
-            useBookingStore.getState().reset();
-            router.push("/book");
-          }}
-        >
-          Book Another Tour
-        </Button>
+        <div className="flex justify-center gap-3 mb-6">
+          {booking.items.reduce((s, i) => s + i.quantity, 0) <= booking.complete_guests_count && booking.status === 'confirmed' && (
+            <Button
+              className="text-white"
+              style={{ backgroundColor: '#0369a1' }}
+              onClick={() => window.open(`/api/tickets/pdf?ref=${booking.id}`, '_blank')}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Download Tickets
+            </Button>
+          )}
+          {booking.items.reduce((s, i) => s + i.quantity, 0) > booking.complete_guests_count && (
+            <p className="text-sm text-amber-600 bg-amber-50 rounded-lg px-4 py-3">
+              Complete all guest information to download tickets
+            </p>
+          )}
+          <Button
+            variant="outline"
+            onClick={() => {
+              useBookingStore.getState().reset();
+              router.push("/book");
+            }}
+          >
+            Book Another Tour
+          </Button>
+        </div>
       </div>
     </div>
   );

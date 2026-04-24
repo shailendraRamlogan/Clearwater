@@ -126,8 +126,10 @@ class BookingController extends Controller
                         'amount' => $grandTotalCents,
                         'currency' => 'usd',
                         'description' => 'Clear Boat Booking - ' . ($booking->primaryGuest->first_name ?? 'Guest'),
-                        'statement_descriptor' => 'Clear Boat Booking',
-                        'metadata' => ['booking_ref' => $booking->booking_ref],
+                        'metadata' => [
+                            'booking_ref' => $booking->booking_ref,
+                            'customer_email' => $booking->primaryGuest->email ?? '',
+                        ],
                     ]);
 
                     $payment = Payment::create([
@@ -193,7 +195,7 @@ class BookingController extends Controller
         }
 
         $booking = $query
-            ->with(['timeSlot.boat', 'primaryGuest', 'items'])
+            ->with(['timeSlot.boat', 'primaryGuest', 'guests', 'items'])
             ->first();
 
         if (!$booking) {
