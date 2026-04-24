@@ -75,7 +75,7 @@
                 <td>{{ $g->email ?? '—' }}</td>
                 <td>{{ $g->phone ?? '—' }}</td>
                 <td>{{ $g->booking->items->sum('quantity') }}</td>
-                <td>{{ $g->is_primary ? '<span class="primary-badge">Booker</span>' : 'Guest' }}</td>
+                <td>{!! $g->is_primary ? '<span class="primary-badge">Booker</span>' : 'Guest' !!}</td>
             </tr>
             @endforeach
         </tbody>

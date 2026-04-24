@@ -13,14 +13,18 @@
                     wire:click="selectGuest({{ $i }})"
                     class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer
                         {{ $isActive
-                            ? 'bg-teal-600 text-white dark:bg-teal-500'
+                            ? 'text-white'
                             : ($hasName
                                 ? 'bg-teal-100 text-teal-800 border border-teal-200 hover:bg-teal-200 dark:bg-teal-900/40 dark:text-teal-300 dark:border-teal-800 dark:hover:bg-teal-900/60'
                                 : 'bg-gray-100 border-2 border-dashed border-gray-300 text-gray-500 hover:border-teal-400 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:border-teal-500')
                         }}"
+                    @if($isActive) style="background-color: #0d9488;" @endif
                 >
                     <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold
-                        {{ $isActive ? 'bg-white text-teal-600 dark:bg-gray-900 dark:text-teal-400' : ($hasName ? 'bg-teal-600 text-white dark:bg-teal-700' : 'bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400') }}">
+                        {{ $isActive ? 'bg-white' : ($hasName ? 'text-white' : 'bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400') }}"
+                    @if($isActive) style="color: #0d9488;" @endif
+                    @if(!$isActive && $hasName) style="background-color: #0d9488;" @endif
+                    >
                         {{ $i + 1 }}
                     </span>
                     @if($hasName)
@@ -89,7 +93,8 @@
                 @if($activeGuestIndex < $expectedGuestCount - 1)
                     <button
                         wire:click="saveGuest"
-                        class="px-4 py-2 bg-teal-600 dark:bg-teal-500 text-white rounded-lg text-sm font-medium hover:bg-teal-700 dark:hover:bg-teal-600 transition-colors cursor-pointer"
+                        class="px-4 py-2 text-white rounded-lg text-sm font-medium transition-colors cursor-pointer"
+                        style="background-color: #0d9488;"
                     >
                         Save Guest
                     </button>
@@ -102,7 +107,8 @@
                 @else
                     <button
                         wire:click="saveAndFinish"
-                        class="px-4 py-2 bg-teal-600 dark:bg-teal-500 text-white rounded-lg text-sm font-medium hover:bg-teal-700 dark:hover:bg-teal-600 transition-colors cursor-pointer"
+                        class="px-4 py-2 text-white rounded-lg text-sm font-medium transition-colors cursor-pointer"
+                        style="background-color: #0d9488;"
                     >
                         Save & Finish
                     </button>
