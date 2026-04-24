@@ -27,6 +27,8 @@ class BookingResource extends JsonResource
             'special_comment' => $this->special_comment ?? '',
             'total_price' => ($this->total_price_cents ?? 0) / 100,
             'status' => $this->status,
+            'is_confirmed' => $this->status === 'confirmed',
+            'needs_confirmation' => $this->status === 'pending',
             'created_at' => $this->created_at?->toIso8601String(),
         ];
     }

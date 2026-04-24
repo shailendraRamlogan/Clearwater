@@ -1,29 +1,62 @@
 "use client";
 
-import { useState } from "react";
-import { format, addDays, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isBefore, startOfDay } from "date-fns";
+import { useState, useEffect } from "react";
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isBefore, startOfDay, addDays } from "date-fns";
 import { Lock } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { getBlockedDates, blockSchedule, unblockSchedule } from "@/lib/booking-service";
+import { toast } from "sonner";
 
 export default function AdminSchedule() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [blockedDates, setBlockedDates] = useState<Set<string>>(new Set());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const monthStr = format(currentMonth, "yyyy-MM");
+
+  useEffect(() => {
+    getBlockedDates(monthStr)
+      .then((blocks) => {
+        setBlockedDates(new Set(blocks.map((b) => b.date)));
+      })
+      .catch(() => {});
+  }, [monthStr]);
+
+  const toggleBlock = async (date: Date) => {
+    const dateStr = format(date, "yyyy-MM-dd");
+    const blocked = blockedDates.has(dateStr);
+    setSaving(true);
+    try {
+      if (blocked) {
+        await unblockSchedule({ date: dateStr });
+        setBlockedDates((prev) => {
+          const next = new Set(prev);
+          next.delete(dateStr);
+          return next;
+        });
+        toast.success(`${format(date, "MMM d")} unblocked`);
+      } else {
+        await blockSchedule({ date: dateStr, reason: "Blocked by admin" });
+        setBlockedDates((prev) => {
+          const next = new Set(prev);
+          next.add(dateStr);
+          return next;
+        });
+        toast.success(`${format(date, "MMM d")} blocked`);
+      }
+    } catch (e: unknown) {
+      toast.error((e as Error).message || "Failed to update schedule");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const days = eachDayOfInterval({
     start: startOfMonth(currentMonth),
     end: endOfMonth(currentMonth),
   });
-
-  const toggleBlock = (dateStr: string) => {
-    setBlockedDates((prev) => {
-      const next = new Set(prev);
-      if (next.has(dateStr)) next.delete(dateStr);
-      else next.add(dateStr);
-      return next;
-    });
-  };
 
   const startDay = startOfMonth(currentMonth).getDay();
   const blanks = Array.from({ length: startDay }, (_, i) => i);
@@ -92,15 +125,15 @@ export default function AdminSchedule() {
                 const dateStr = format(day, "yyyy-MM-dd");
                 const blocked = blockedDates.has(dateStr);
                 const past = isBefore(day, startOfDay(addDays(new Date(), 1)));
-                const selected = selectedDate && isSameDay(day, selectedDate);
+                const selected = selectedDate && format(selectedDate, "yyyy-MM-dd") === dateStr;
 
                 return (
                   <button
                     key={dateStr}
-                    disabled={past}
+                    disabled={past || saving}
                     onClick={() => {
                       setSelectedDate(day);
-                      if (!past) toggleBlock(dateStr);
+                      if (!past) toggleBlock(day);
                     }}
                     className={`relative p-2 rounded-lg text-sm transition-all ${
                       past
@@ -140,7 +173,7 @@ export default function AdminSchedule() {
                     className="flex items-center justify-between p-3 bg-ocean-50 rounded-lg"
                   >
                     <span className="font-medium text-sm">{time}</span>
-                    <Button variant="ghost" size="sm">
+                    <Button variant="ghost" size="sm" disabled>
                       <Lock className="h-3 w-3 mr-1" />
                       Block
                     </Button>

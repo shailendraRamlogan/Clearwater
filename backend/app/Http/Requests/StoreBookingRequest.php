@@ -27,4 +27,24 @@ class StoreBookingRequest extends FormRequest
             'guests.*.email' => 'nullable|email|max:255',
         ];
     }
+
+    public function after(): array
+    {
+        return [
+            function ($validator) {
+                // Validate that any provided guest has at least one field filled
+                $guests = $this->input('guests', []);
+                if (is_array($guests)) {
+                    foreach ($guests as $i => $guest) {
+                        if (!empty($guest['first_name']) || !empty($guest['last_name']) || !empty($guest['email'])) {
+                            // Has some data — first_name is the minimum required if anything is filled
+                            if (empty(trim($guest['first_name'] ?? ''))) {
+                                $validator->errors()->add("guests.$i.first_name", 'If adding a guest, at least a first name is required.');
+                            }
+                        }
+                    }
+                }
+            },
+        ];
+    }
 }

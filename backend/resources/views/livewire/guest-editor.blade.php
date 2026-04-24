@@ -78,6 +78,7 @@
                         placeholder="email@example.com"
                     />
                 </div>
+                @if($activeGuestIndex === 0)
                 <div>
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Phone</label>
                     <input
@@ -87,6 +88,7 @@
                         placeholder="+1 242 555-0000"
                     />
                 </div>
+                @endif
             </div>
 
             <div class="flex gap-3 mt-6">

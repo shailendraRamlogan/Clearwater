@@ -14,7 +14,7 @@ return [
     |
     */
 
-    'admin_token' => env('ADMIN_TOKEN', 'clearboat-admin-token-2026'),
+    'admin_token' => env('ADMIN_TOKEN'),
 
     'stripe' => [
         'secret' => env('STRIPE_SECRET_KEY'),

@@ -15,9 +15,11 @@ class AvailabilityController extends Controller
     {
         $date = $request->validated('date');
 
+        $dayName = strtolower(date('l', strtotime($date)));
+
         $slots = Boat::where('is_active', true)
-            ->whereHas('timeSlots', fn($q) => $q->where('is_blocked', false))
-            ->with(['timeSlots' => fn($q) => $q->where('is_blocked', false)])
+            ->whereHas('timeSlots', fn($q) => $q->where('is_blocked', false)->where('day', $dayName))
+            ->with(['timeSlots' => fn($q) => $q->where('is_blocked', false)->where('day', $dayName)])
             ->get()
             ->flatMap(fn($boat) => $boat->timeSlots->map(function ($slot) use ($date) {
                 $used = Booking::where('time_slot_id', $slot->id)

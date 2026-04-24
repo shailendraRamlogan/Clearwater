@@ -21,10 +21,35 @@ import type { DailyReport } from "@/types/booking";
 
 export default function AdminDashboard() {
   const [report, setReport] = useState<DailyReport | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    getDailyReport(format(new Date(), "yyyy-MM-dd")).then(setReport);
+    getDailyReport(format(new Date(), "yyyy-MM-dd"))
+      .then(setReport)
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
   }, []);
+
+  if (loading) {
+    return (
+      <div className="section-container py-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-32 bg-ocean-50 rounded-xl animate-pulse" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="section-container py-8 text-center">
+        <p className="text-red-500">Failed to load dashboard: {error}</p>
+      </div>
+    );
+  }
 
   const stats = [
     {

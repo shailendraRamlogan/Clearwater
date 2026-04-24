@@ -16,7 +16,7 @@ class ConfirmationRequired extends Page implements Tables\Contracts\HasTable
 
     protected static ?string $navigationIcon = 'heroicon-o-shield-exclamation';
     protected static ?string $navigationGroup = 'Guest Management';
-    protected static ?int $navigationSort = 101;
+    protected static bool $shouldRegisterNavigation = false;
 
     public function getBreadcrumbs(): array
     {

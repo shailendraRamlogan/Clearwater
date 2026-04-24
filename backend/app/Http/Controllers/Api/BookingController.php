@@ -9,7 +9,9 @@ use App\Models\Booking;
 use App\Models\BookingGuest;
 use App\Models\BookingItem;
 use App\Models\Payment;
+use App\Models\TimeSlot;
 use App\Services\EmailService;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class BookingController extends Controller
@@ -19,6 +21,23 @@ class BookingController extends Controller
         $validated = $request->validated();
 
         return DB::transaction(function () use ($validated, $request) {
+            // Capacity check with row lock
+            $timeSlot = TimeSlot::where('id', $validated['time_slot_id'])->lockForUpdate()->first();
+            if (!$timeSlot) {
+                return response()->json(['message' => 'Time slot not found.'], 404);
+            }
+
+            $totalGuests = $validated['adult_count'] + $validated['child_count'];
+            $existingBooked = Booking::where('time_slot_id', $validated['time_slot_id'])
+                ->where('tour_date', $validated['tour_date'])
+                ->whereNotIn('status', ['cancelled'])
+                ->get()
+                ->sum(fn($b) => $b->items->sum('quantity'));
+
+            if ($existingBooked + $totalGuests > $timeSlot->max_capacity) {
+                return response()->json(['message' => 'This time slot is full. Please select a different time.'], 409);
+            }
+
             // Pricing
             $adultPrice = 20000; // $200 in cents
             $childPrice = 15000; // $150 in cents
@@ -55,13 +74,13 @@ class BookingController extends Controller
             // Additional guests (optional)
             if (!empty($validated['guests'])) {
                 foreach ($validated['guests'] as $guest) {
-                    if (!empty($guest['first_name']) && !empty($guest['last_name'])) {
+                    if (!empty($guest['first_name']) || !empty($guest['last_name']) || !empty($guest['email'])) {
                         BookingGuest::create([
                             'booking_id' => $booking->id,
                             'first_name' => $guest['first_name'],
-                            'last_name' => $guest['last_name'],
-                            'email' => $guest['email'] ?? null,
-                            'phone' => null,
+                            'last_name' => $guest['last_name'] ?? '',
+                            'email' => $guest['email'] ?? '',
+                            'phone' => '',
                             'is_primary' => false,
                         ]);
                     }
@@ -115,6 +134,18 @@ class BookingController extends Controller
                 }
             }
 
+            // Auto-confirm if all guest info is complete
+            $totalTickets = $validated['adult_count'] + $validated['child_count'];
+            $completeGuestCount = $booking->guests()
+                ->whereNotNull('first_name')->where('first_name', '!=', '')
+                ->whereNotNull('last_name')->where('last_name', '!=', '')
+                ->whereNotNull('email')->where('email', '!=', '')
+                ->count();
+
+            if ($completeGuestCount >= $totalTickets) {
+                $booking->update(['status' => 'confirmed']);
+            }
+
             // Load relationships for response
             $booking->load(['timeSlot.boat', 'primaryGuest', 'items']);
 
@@ -135,6 +166,30 @@ class BookingController extends Controller
                 ] : null,
             ], 201);
         });
+    }
+
+    public function lookup(Request $request)
+    {
+        $request->validate([
+            'email' => 'nullable|email',
+            'ref' => 'required|string',
+        ]);
+
+        $query = Booking::where('booking_ref', $request->query('ref'));
+
+        if ($request->filled('email')) {
+            $query->whereHas('primaryGuest', fn($q) => $q->where('email', $request->query('email')));
+        }
+
+        $booking = $query
+            ->with(['timeSlot.boat', 'primaryGuest', 'items'])
+            ->first();
+
+        if (!$booking) {
+            return response()->json(['message' => 'Booking not found.'], 404);
+        }
+
+        return response()->json(['booking' => new BookingResource($booking)]);
     }
 
     public function index()

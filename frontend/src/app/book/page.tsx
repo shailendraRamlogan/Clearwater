@@ -17,6 +17,8 @@ import {
   Plus,
   PartyPopper,
 } from "lucide-react";
+import { loadStripe } from "@stripe/stripe-js";
+import { CardElement, Elements, useStripe, useElements } from "@stripe/react-stripe-js";
 import { Button } from "@/components/ui/button";
 import "react-phone-input-2/lib/style.css";
 import PhoneInput from "react-phone-input-2";
@@ -27,8 +29,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useBookingStore } from "@/stores/booking-store";
 import { ModernCalendar } from "@/components/ui/calendar";
 import { getAvailability, createBooking } from "@/lib/booking-service";
+// import api from "@/lib/api";
 import { formatCurrency, formatTime } from "@/lib/utils";
 import { toast } from "sonner";
+import { useRouter } from "next/navigation";
+
+const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || "");
 
 const stepIcons = [
   Calendar,
@@ -46,13 +52,18 @@ const stepLabels = [
   "Pay",
 ];
 
-export default function BookingPage() {
+function BookingForm() {
   const store = useBookingStore();
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [showPayment, setShowPayment] = useState(false);
-  const [cardData, setCardData] = useState({ number: "", expiry: "", cvc: "", name: "" });
+  const [stripeError, setStripeError] = useState("");
+  const [processingPayment, setProcessingPayment] = useState(false);
   const [bookingId, setBookingId] = useState<string | null>(null);
+  const submittedRef = useRef(false);
+  const router = useRouter();
+  const stripe = useStripe();
+  const elements = useElements();
   const [adultExpanded, setAdultExpanded] = useState(false);
   const [childExpanded, setChildExpanded] = useState(false);
   const [activeGuest, setActiveGuest] = useState(0);
@@ -68,6 +79,13 @@ export default function BookingPage() {
   useEffect(() => {
     if (store.childCount === 0) { setChildExpanded(false); childDismissed.current = false; }
   }, [store.childCount]);
+
+  // Reset store when user navigates away from the booking page
+  useEffect(() => {
+    return () => {
+      useBookingStore.getState().reset();
+    };
+  }, []);
 
   const fetchAvailability = async (date: Date) => {
     const dateStr = format(date, "yyyy-MM-dd");
@@ -104,7 +122,10 @@ export default function BookingPage() {
       return;
     }
 
+    if (submittedRef.current) return;
+    submittedRef.current = true;
     setLoading(true);
+    setStripeError("");
     try {
       const booking = await createBooking({
         tour_date: format(store.selectedDate, "yyyy-MM-dd"),
@@ -115,14 +136,61 @@ export default function BookingPage() {
         special_occasion: store.specialOccasion,
         special_comment: store.specialComment,
         guest: store.guests[0],
-        guests: store.guests.filter((g) => g.first_name && g.last_name),
+        guests: store.guests.slice(1).filter((g) => g.first_name || g.last_name || g.email || g.phone),
       });
-      setBookingId(booking.id);
+
+      // Check if Stripe payment is needed
+      const clientSecret = (booking as unknown as Record<string, string>).client_secret;
+      if (!clientSecret) {
+        // No Stripe — booking created without payment
+        toast.success("Booking created! Our team will contact you.");
+        router.push(`/book/confirmation?ref=${booking.id}&email=${encodeURIComponent(store.guests[0].email)}`);
+        return;
+      }
+
+      // Process Stripe payment
+      setProcessingPayment(true);
+      if (!stripe || !elements) {
+        setStripeError("Payment system not available. Please refresh and try again.");
+        submittedRef.current = false;
+        return;
+      }
+      const cardElement = elements.getElement(CardElement);
+      if (!cardElement) {
+        setStripeError("Card element not found. Please refresh.");
+        submittedRef.current = false;
+        return;
+      }
+      const { error: stripeErr } = await stripe.confirmCardPayment(clientSecret, {
+        payment_method: { card: cardElement },
+      });
+      if (stripeErr) {
+        setStripeError(stripeErr.message || "Payment failed.");
+        submittedRef.current = false;
+        return;
+      }
+
       toast.success("Booking confirmed! Check your email for details.");
-    } catch {
-      toast.error("Booking failed. Please try again.");
+      router.push(`/book/confirmation?ref=${booking.id}&email=${encodeURIComponent(store.guests[0].email)}`);
+    } catch (err: unknown) {
+      submittedRef.current = false;
+      const error = err as Error & { status?: number; errors?: Record<string, string[]> };
+      if (error.status === 409) {
+        toast.error("This slot just filled up. Please select a different time.");
+      } else if (error.errors) {
+        // Field-level validation errors from 422
+        const fieldErrors: Record<string, string> = {};
+        for (const [field, msgs] of Object.entries(error.errors || {})) {
+          fieldErrors[field] = Array.isArray(msgs) ? msgs[0] : String(msgs);
+        }
+        setErrors(fieldErrors);
+        toast.error("Please fix the highlighted fields.");
+      } else {
+        toast.error(error.message || "Booking failed. Please try again.");
+      }
     } finally {
       setLoading(false);
+      setProcessingPayment(false);
     }
   };
 
@@ -778,9 +846,10 @@ export default function BookingPage() {
                       let firstErrorIndex = -1;
 
                       store.guests.forEach((g, i) => {
+                        // Skip guests with no data at all (optional)
+                        if (!g.first_name.trim() && !g.last_name.trim() && !g.email.trim()) return;
+                        // If any field is filled, at least a first name is required
                         if (!g.first_name.trim()) { hasError = true; if (firstErrorIndex === -1) { firstErrorIndex = i; errs.first_name = "Required"; } }
-                        if (!g.last_name.trim()) { hasError = true; if (firstErrorIndex === -1) { firstErrorIndex = i; errs.last_name = "Required"; } }
-                        if (!g.email.trim()) { hasError = true; if (firstErrorIndex === -1) { firstErrorIndex = i; errs.email = "Required"; } }
                       });
 
                       // Primary guest extra validation
@@ -906,32 +975,24 @@ export default function BookingPage() {
                 {showPayment && (
                   <div className="border-t border-ocean-200 pt-6 space-y-4">
                     <h3 className="font-semibold text-lg">Card Details</h3>
-                    <div>
-                      <Label htmlFor="cardName">Name on Card</Label>
-                      <Input id="cardName" placeholder="John Doe" value={cardData.name} onChange={(e) => setCardData({ ...cardData, name: e.target.value })} />
+                    <div className="rounded-lg border border-ocean-200 p-4">
+                      <CardElement
+                        options={{
+                          style: {
+                            base: {
+                              fontSize: "16px",
+                              color: "#1a365d",
+                              "::placeholder": { color: "#94a3b8" },
+                            },
+                          },
+                        }}
+                      />
                     </div>
-                    <div>
-                      <Label htmlFor="cardNumber">Card Number</Label>
-                      <Input id="cardNumber" placeholder="4242 4242 4242 4242" value={cardData.number} onChange={(e) => {
-                        const v = e.target.value.replace(/\D/g, '').slice(0, 16);
-                        const formatted = v.replace(/(.{4})/g, '$1 ').trim();
-                        setCardData({ ...cardData, number: formatted });
-                      }} />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="cardExpiry">Expiry</Label>
-                        <Input id="cardExpiry" placeholder="MM/YY" value={cardData.expiry} onChange={(e) => {
-                          let v = e.target.value.replace(/\D/g, '').slice(0, 4);
-                          if (v.length >= 2) v = v.slice(0, 2) + '/' + v.slice(2);
-                          setCardData({ ...cardData, expiry: v });
-                        }} />
+                    {stripeError && (
+                      <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
+                        {stripeError}
                       </div>
-                      <div>
-                        <Label htmlFor="cardCvc">CVC</Label>
-                        <Input id="cardCvc" placeholder="123" value={cardData.cvc} onChange={(e) => setCardData({ ...cardData, cvc: e.target.value })} maxLength={4} />
-                      </div>
-                    </div>
+                    )}
                   </div>
                 )}
 
@@ -946,14 +1007,16 @@ export default function BookingPage() {
                   <Button
                     variant="cta"
                     size="lg"
-                    disabled={loading}
+                    disabled={loading || submittedRef.current}
                     onClick={showPayment ? handleBooking : () => setShowPayment(true)}
                   >
-                    {loading
-                      ? "Processing..."
-                      : showPayment
-                        ? "Confirm Payment"
-                        : `Pay ${formatCurrency(store.getTotal())}`}
+                    {processingPayment
+                      ? "Processing payment..."
+                      : loading
+                        ? "Processing..."
+                        : showPayment
+                          ? "Confirm Payment"
+                          : `Pay ${formatCurrency(store.getTotal())}`}
                   </Button>
                 </div>
               </CardContent>
@@ -963,5 +1026,13 @@ export default function BookingPage() {
       </div>
       </div>
     </div>
+  );
+}
+
+export default function BookingPage() {
+  return (
+    <Elements stripe={stripePromise}>
+      <BookingForm />
+    </Elements>
   );
 }

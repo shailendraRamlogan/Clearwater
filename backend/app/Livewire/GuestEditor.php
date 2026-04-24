@@ -97,6 +97,7 @@ class GuestEditor extends Component
             $booking->update([
                 'is_confirmed' => true,
                 'needs_confirmation' => false,
+                'status' => 'confirmed',
             ]);
         }
 

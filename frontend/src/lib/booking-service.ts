@@ -220,6 +220,28 @@ export async function blockSchedule(payload: {
   await api.post("/schedules/block", payload);
 }
 
+export async function getBookingLookup(ref: string): Promise<Record<string, unknown>> {
+  const { data } = await api.get("/bookings/lookup", { params: { ref } });
+  return data.booking;
+}
+
+export async function getBlockedDates(month: string): Promise<{ date: string; time_slot_id?: string; reason?: string }[]> {
+  const { data } = await api.get("/schedules/blocked", { params: { month } });
+  return data.blocks;
+}
+
+export async function unblockSchedule(payload: {
+  date: string;
+  time_slot_id?: string;
+}): Promise<void> {
+  await api.post("/schedules/unblock", payload);
+}
+
+export async function getPricing(): Promise<{ adult: number; child: number; upgrade: number }> {
+  const { data } = await api.get("/pricing");
+  return data.pricing;
+}
+
 export async function getSchedulePdfUrl(date: string): Promise<string> {
   if (USE_MOCK) {
     await delay(300);

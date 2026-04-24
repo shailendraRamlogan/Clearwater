@@ -45,7 +45,8 @@ class IncompleteBookings extends Page implements Tables\Contracts\HasTable
                     ->withCount('guests')
                     ->with(['primaryGuest', 'timeSlot.boat', 'items'])
                     ->whereRaw('(SELECT COUNT(*) FROM booking_guests WHERE booking_guests.booking_id = bookings.id) < (SELECT COALESCE(SUM(quantity), 0) FROM booking_items WHERE booking_items.booking_id = bookings.id)')
-                    ->whereIn('status', ['pending', 'confirmed'])
+                    ->orWhereRaw('(SELECT COUNT(*) FROM booking_guests WHERE booking_guests.booking_id = bookings.id AND booking_guests.is_primary = false AND (booking_guests.last_name = \'\' OR booking_guests.email = \'\')) > 0')
+                    ->whereIn('status', ['pending'])
                     ->latest()
             )
             ->columns([
@@ -57,8 +58,8 @@ class IncompleteBookings extends Page implements Tables\Contracts\HasTable
                 TextColumn::make('guests_count')
                     ->label('Guests')
                     ->badge()
-                    ->color(fn ($record) => $record->guests_count >= $record->items->sum('quantity') ? 'success' : 'warning')
-                    ->formatStateUsing(fn ($record) => "{$record->guests_count} / {$record->items->sum('quantity')}"),
+                    ->color(fn ($record) => (1 + $record->guests()->where('is_primary', false)->where('last_name', '!=', '')->where('email', '!=', '')->count()) >= $record->items->sum('quantity') ? 'success' : 'warning')
+                    ->formatStateUsing(fn ($record) => (1 + $record->guests()->where('is_primary', false)->where('last_name', '!=', '')->where('email', '!=', '')->count()) . ' / ' . $record->items->sum('quantity')),
                 TextColumn::make('status')->badge(),
             ])
             ->actions([

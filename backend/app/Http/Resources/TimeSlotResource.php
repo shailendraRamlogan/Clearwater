@@ -11,8 +11,8 @@ class TimeSlotResource extends JsonResource
     {
         return [
             'id' => $this->id,
-            'start_time' => $this->start_time->format('H:i'),
-            'end_time' => $this->end_time->format('H:i'),
+            'start_time' => substr($this->start_time, 0, 5),
+            'end_time' => substr($this->end_time, 0, 5),
             'boat_id' => $this->boat_id,
             'boat_name' => $this->whenLoaded('boat', fn() => $this->boat->name),
             'remaining_capacity' => $this->when(isset($this->remaining_capacity), $this->remaining_capacity),

@@ -21,14 +21,14 @@ class EmailService
             $result = Resend::emails()->send([
                 'from' => 'Clear Boat Bahamas <bookings@clearboatbahamas.com>',
                 'to' => [$guest->email],
-                'subject' => "Booking Confirmed: {$booking->booking_ref}",
+                'subject' => "Booking Received: {$booking->booking_ref}",
                 'html' => $this->buildHtml($booking),
             ]);
 
             EmailLog::create([
                 'booking_id' => $booking->id,
                 'recipient' => $guest->email,
-                'subject' => "Booking Confirmed: {$booking->booking_ref}",
+                'subject' => "Booking Received: {$booking->booking_ref}",
                 'template' => 'booking_confirmation',
                 'resend_id' => $result->id ?? null,
                 'status' => 'sent',
@@ -37,7 +37,7 @@ class EmailService
             EmailLog::create([
                 'booking_id' => $booking->id,
                 'recipient' => $guest->email,
-                'subject' => "Booking Confirmed: {$booking->booking_ref}",
+                'subject' => "Booking Received: {$booking->booking_ref}",
                 'template' => 'booking_confirmation',
                 'status' => 'failed',
             ]);
@@ -55,9 +55,9 @@ class EmailService
 
         return <<<HTML
         <div style="font-family: system-ui, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2>Booking Confirmed 🎉</h2>
+            <h2>Booking Received 🎉</h2>
             <p>Hi {$guest->first_name},</p>
-            <p>Your booking with <strong>Clear Boat Bahamas</strong> is confirmed.</p>
+            <p>We've received your booking with <strong>Clear Boat Bahamas</strong>. Please complete payment to confirm your reservation.</p>
 
             <table style="width:100%; border-collapse:collapse; margin: 20px 0;">
                 <tr><td style="padding:8px; border:1px solid #eee;"><strong>Reference</strong></td><td style="padding:8px; border:1px solid #eee;">{$booking->booking_ref}</td></tr>

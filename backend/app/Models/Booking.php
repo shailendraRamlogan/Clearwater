@@ -7,6 +7,22 @@ use Illuminate\Support\Str;
 
 class Booking extends Model
 {
+    public const STATUS_PENDING = 'pending';
+    public const STATUS_CONFIRMED = 'confirmed';
+    public const STATUS_CANCELLED = 'cancelled';
+
+    private const ALLOWED_STATUSES = [
+        self::STATUS_PENDING,
+        self::STATUS_CONFIRMED,
+        self::STATUS_CANCELLED,
+    ];
+
+    private const TRANSITIONS = [
+        self::STATUS_PENDING => [self::STATUS_CONFIRMED, self::STATUS_CANCELLED],
+        self::STATUS_CONFIRMED => [self::STATUS_CANCELLED],
+        self::STATUS_CANCELLED => [],
+    ];
+
     protected $keyType = 'string';
     public $incrementing = false;
 
@@ -70,6 +86,15 @@ class Booking extends Model
     {
         $expectedGuests = $this->items()->sum('quantity');
         return $this->guests()->count() >= $expectedGuests;
+    }
+
+    public function canTransitionTo(string $newStatus): bool
+    {
+        if (!in_array($newStatus, self::ALLOWED_STATUSES, true)) {
+            return false;
+        }
+        $allowed = self::TRANSITIONS[$this->status] ?? [];
+        return in_array($newStatus, $allowed, true);
     }
 
     public function scopeIncomplete($query)

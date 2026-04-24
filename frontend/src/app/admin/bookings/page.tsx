@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { format } from "date-fns";
-import { Download } from "lucide-react";
+// Download icon removed - CSV export disabled
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -14,13 +14,14 @@ export default function AdminBookings() {
   const [dateFilter, setDateFilter] = useState(format(new Date(), "yyyy-MM-dd"));
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     setLoading(true);
-    getBookings(dateFilter).then((data) => {
-      setBookings(data);
-      setLoading(false);
-    });
+    setError("");
+    getBookings(dateFilter)
+      .then((data) => { setBookings(data); setLoading(false); })
+      .catch((e) => { setError(e.message); setLoading(false); });
   }, [dateFilter]);
 
   return (
@@ -32,9 +33,7 @@ export default function AdminBookings() {
             Manage and view all tour bookings
           </p>
         </div>
-        <Button variant="outline">
-          <Download className="mr-2 h-4 w-4" />
-          Export CSV
+        <Button variant="outline" disabled>
         </Button>
       </div>
 
@@ -59,6 +58,10 @@ export default function AdminBookings() {
               {[1, 2, 3].map((i) => (
                 <div key={i} className="h-24 bg-ocean-50 rounded-xl animate-pulse" />
               ))}
+            </div>
+          ) : error ? (
+            <div className="text-center py-12 text-red-500">
+              <p>{error}</p>
             </div>
           ) : bookings.length > 0 ? (
             <div className="space-y-4">

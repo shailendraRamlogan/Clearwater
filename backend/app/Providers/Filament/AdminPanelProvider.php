@@ -43,7 +43,6 @@ class AdminPanelProvider extends PanelProvider
             ->widgets([
                 Widgets\AccountWidget::class,
                 \App\Filament\Widgets\IncompleteBookingsWidget::class,
-                \App\Filament\Widgets\ConfirmationRequiredWidget::class,
             ])
             ->middleware([
                 EncryptCookies::class,
