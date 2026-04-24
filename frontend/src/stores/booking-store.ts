@@ -40,8 +40,15 @@ interface BookingState {
   nextStep: () => void;
   prevStep: () => void;
 
+  // Pricing fees (from API)
+  pricingFees: { name: string; type: string; value: number; flat_value?: number }[];
+  setPricingFees: (fees: { name: string; type: string; value: number }[]) => void;
+
   // Computed
   getTotal: () => number;
+  getSubtotal: () => number;
+  getFees: () => { name: string; type: string; value: number; flat_value?: number; amount: number }[];
+  getGrandTotal: () => number;
   getItems: () => BookingItem[];
   totalGuests: () => number;
   missingGuestCount: () => number;
@@ -65,6 +72,7 @@ const initialState = {
   selectedDate: undefined,
   selectedSlot: undefined,
   availableSlots: [],
+  pricingFees: [],
   adultCount: 0,
   childCount: 0,
   packageUpgrade: false,
@@ -80,6 +88,7 @@ export const useBookingStore = create<BookingState>((set, get) => ({
   setSelectedDate: (date) => set({ selectedDate: date, selectedSlot: undefined }),
   setSelectedSlot: (slot) => set({ selectedSlot: slot }),
   setAvailableSlots: (slots) => set({ availableSlots: slots }),
+  setPricingFees: (fees) => set({ pricingFees: fees }),
   setAdultCount: (count) => set({ adultCount: Math.max(0, count) }),
   setChildCount: (count) => set({ childCount: Math.max(0, count) }),
   setPackageUpgrade: (upgrade) => set({ packageUpgrade: upgrade }),
@@ -101,10 +110,38 @@ export const useBookingStore = create<BookingState>((set, get) => ({
   prevStep: () => set((state) => ({ currentStep: Math.max(1, state.currentStep - 1) })),
 
   getTotal: () => {
+    return get().getSubtotal();
+  },
+
+  getSubtotal: () => {
     const state = get();
     const ticketTotal = state.adultCount * ADULT_PRICE + state.childCount * CHILD_PRICE;
     const upgradeTotal = state.packageUpgrade ? (state.adultCount + state.childCount) * UPGRADE_PRICE : 0;
     return ticketTotal + upgradeTotal;
+  },
+
+  getFees: () => {
+    const subtotal = get().getSubtotal();
+    const fees = get().pricingFees;
+    if (!fees || fees.length === 0) return [];
+    return fees.map((f) => {
+      let amount = 0;
+      if (f.type === 'flat') {
+        amount = f.flat_value ?? f.value;
+      } else if (f.type === 'both') {
+        amount = Math.round(subtotal * f.value / 100 * 100) / 100 + (f.flat_value ?? 0);
+      } else {
+        amount = Math.round(subtotal * f.value / 100 * 100) / 100;
+      }
+      return { name: f.name, type: f.type, value: f.value, flat_value: f.flat_value, amount };
+    });
+  },
+
+  getGrandTotal: () => {
+    const subtotal = get().getSubtotal();
+    const fees = get().getFees();
+    const feesTotal = fees.reduce((s, f) => s + f.amount, 0);
+    return subtotal + feesTotal;
   },
 
   getItems: () => {

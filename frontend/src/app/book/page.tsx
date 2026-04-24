@@ -28,7 +28,7 @@ import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useBookingStore } from "@/stores/booking-store";
 import { ModernCalendar } from "@/components/ui/calendar";
-import { getAvailability, createBooking } from "@/lib/booking-service";
+import { getAvailability, createBooking, getPricing, confirmPayment } from "@/lib/booking-service";
 // import api from "@/lib/api";
 import { formatCurrency, formatTime } from "@/lib/utils";
 import { toast } from "sonner";
@@ -71,6 +71,13 @@ function BookingForm() {
   const adultDismissed = useRef(false);
   const childDismissed = useRef(false);
   const lastFetchedDate = useRef<string | null>(null);
+
+  // Fetch pricing fees on mount
+  useEffect(() => {
+    getPricing().then((p) => {
+      if (p.fees) store.setPricingFees(p.fees);
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (store.adultCount === 0) { setAdultExpanded(false); adultDismissed.current = false; }
@@ -168,6 +175,16 @@ function BookingForm() {
         setStripeError(stripeErr.message || "Payment failed.");
         submittedRef.current = false;
         return;
+      }
+
+      // Confirm payment with backend
+      const stripeIntentId = (booking as unknown as Record<string, string>).stripe_intent_id;
+      if (stripeIntentId) {
+        try {
+          await confirmPayment(booking.id, stripeIntentId);
+        } catch {
+          // Non-blocking — payment already confirmed via Stripe
+        }
       }
 
       toast.success("Booking confirmed! Check your email for details.");
@@ -626,11 +643,21 @@ function BookingForm() {
 
                   {/* Running Total */}
                   <div className="bg-ocean-900 text-white rounded-lg p-6">
-                    <div className="flex justify-between items-center">
-                      <span className="text-ocean-200">Total</span>
-                      <span className="text-3xl font-bold">
-                        {formatCurrency(store.getTotal())}
-                      </span>
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-ocean-200">Subtotal</span>
+                        <span>{formatCurrency(store.getSubtotal())}</span>
+                      </div>
+                      {store.getFees().map((fee, i) => (
+                        <div key={i} className="flex justify-between items-center">
+                          <span className="text-ocean-200">{fee.name} ({fee.type === 'flat' ? `$${(fee.flat_value ?? fee.value).toFixed(2)}` : fee.type === 'both' ? `${fee.value}% + $${(fee.flat_value ?? 0).toFixed(2)}` : `${fee.value}%`})</span>
+                          <span>{formatCurrency(fee.amount)}</span>
+                        </div>
+                      ))}
+                      <div className="border-t border-ocean-700 pt-2 flex justify-between items-center">
+                        <span className="text-ocean-200">Total</span>
+                        <span className="text-3xl font-bold">{formatCurrency(store.getGrandTotal())}</span>
+                      </div>
                     </div>
                   </div>
 
@@ -934,11 +961,21 @@ function BookingForm() {
                       </div>
                     )}
                   </div>
-                  <div className="border-t border-ocean-200 pt-3 flex justify-between items-center">
-                    <span className="font-semibold text-lg">Total</span>
-                    <span className="text-2xl font-bold text-ocean-700">
-                      {formatCurrency(store.getTotal())}
-                    </span>
+                  <div className="border-t border-ocean-200 pt-3 space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="font-semibold">Subtotal</span>
+                      <span className="font-medium">{formatCurrency(store.getSubtotal())}</span>
+                    </div>
+                    {store.getFees().map((fee, i) => (
+                      <div key={i} className="flex justify-between items-center text-sm">
+                        <span className="text-ocean-500">{fee.name} ({fee.type === 'flat' ? `$${(fee.flat_value ?? fee.value).toFixed(2)}` : fee.type === 'both' ? `${fee.value}% + $${(fee.flat_value ?? 0).toFixed(2)}` : `${fee.value}%`})</span>
+                        <span>{formatCurrency(fee.amount)}</span>
+                      </div>
+                    ))}
+                    <div className="border-t border-ocean-200 pt-2 flex justify-between items-center">
+                      <span className="font-semibold text-lg">Total</span>
+                      <span className="text-2xl font-bold text-ocean-700">{formatCurrency(store.getGrandTotal())}</span>
+                    </div>
                   </div>
                 </div>
 
@@ -1016,7 +1053,7 @@ function BookingForm() {
                         ? "Processing..."
                         : showPayment
                           ? "Confirm Payment"
-                          : `Pay ${formatCurrency(store.getTotal())}`}
+                          : `Pay ${formatCurrency(store.getGrandTotal())}`}
                   </Button>
                 </div>
               </CardContent>

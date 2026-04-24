@@ -29,8 +29,10 @@ class Booking extends Model
     protected $fillable = [
         'id', 'booking_ref', 'tour_date', 'time_slot_id', 'status',
         'photo_upgrade_count', 'special_occasion', 'special_comment',
-        'total_price_cents', 'is_confirmed', 'needs_confirmation',
+        'total_price_cents', 'fees_cents', 'is_confirmed', 'needs_confirmation',
     ];
+
+    protected $appends = ['guests_count', 'complete_guests_count', 'grand_total'];
 
     protected $casts = [
         'tour_date' => 'date',
@@ -105,5 +107,27 @@ class Booking extends Model
     public function scopeNeedsConfirmation($query)
     {
         return $query->where('needs_confirmation', true)->where('is_confirmed', false);
+    }
+
+    public function getGuestsCountAttribute(): int
+    {
+        return $this->items->sum('quantity');
+    }
+
+    public function getCompleteGuestsCountAttribute(): int
+    {
+        if (!$this->relationLoaded('guests')) {
+            return 0;
+        }
+        return 1 + $this->guests
+            ->where('is_primary', false)
+            ->where('last_name', '!=', '')
+            ->where('email', '!=', '')
+            ->count();
+    }
+
+    public function getGrandTotalAttribute(): int
+    {
+        return ($this->total_price_cents ?? 0) + ($this->fees_cents ?? 0);
     }
 }

@@ -11,6 +11,7 @@ use App\Models\BookingItem;
 use App\Models\Payment;
 use App\Models\TimeSlot;
 use App\Services\EmailService;
+use App\Services\FeeService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -51,6 +52,12 @@ class BookingController extends Controller
             $upgradeTotal = $upgradeCount * $photoUpgradePrice;
             $totalCents = $adultTotal + $childTotal + $upgradeTotal;
 
+            // Calculate fees
+            $feeService = app(FeeService::class);
+            $feeResult = $feeService->calculateFees($totalCents);
+            $feesCents = $feeResult['total_fees_cents'];
+            $grandTotalCents = $feeResult['grand_total_cents'];
+
             $booking = Booking::create([
                 'tour_date' => $validated['tour_date'],
                 'time_slot_id' => $validated['time_slot_id'],
@@ -59,6 +66,7 @@ class BookingController extends Controller
                 'special_occasion' => ($validated['special_occasion'] ?? false) ? 'birthday' : null,
                 'special_comment' => $validated['special_comment'] ?? null,
                 'total_price_cents' => $totalCents,
+                'fees_cents' => $feesCents,
             ]);
 
             // Primary guest
@@ -115,15 +123,17 @@ class BookingController extends Controller
                 try {
                     \Stripe\Stripe::setApiKey($stripeKey);
                     $intent = \Stripe\PaymentIntent::create([
-                        'amount' => $totalCents,
+                        'amount' => $grandTotalCents,
                         'currency' => 'usd',
+                        'description' => 'Clear Boat Booking - ' . ($booking->primaryGuest->first_name ?? 'Guest'),
+                        'statement_descriptor' => 'Clear Boat Booking',
                         'metadata' => ['booking_ref' => $booking->booking_ref],
                     ]);
 
                     $payment = Payment::create([
                         'booking_id' => $booking->id,
                         'stripe_intent_id' => $intent->id,
-                        'amount_cents' => $totalCents,
+                        'amount_cents' => $grandTotalCents,
                         'status' => 'pending',
                     ]);
 
@@ -160,6 +170,7 @@ class BookingController extends Controller
 
             return response()->json([
                 'booking' => new BookingResource($booking),
+                'fees' => $feeResult['fees'],
                 'payment' => $payment ? [
                     'client_secret' => $clientSecret,
                     'stripe_intent_id' => $payment->stripe_intent_id,
@@ -203,5 +214,42 @@ class BookingController extends Controller
         return response()->json([
             'bookings' => BookingResource::collection($query->orderByDesc('created_at')->get()),
         ]);
+    }
+
+    public function confirmPayment(Request $request)
+    {
+        $request->validate([
+            'booking_ref' => 'required|string',
+            'payment_intent_id' => 'required|string',
+        ]);
+
+        $payment = Payment::where('stripe_intent_id', $request->payment_intent_id)
+            ->whereHas('booking', fn ($q) => $q->where('booking_ref', $request->booking_ref))
+            ->first();
+
+        if (!$payment) {
+            return response()->json(['message' => 'Payment not found.'], 404);
+        }
+
+        // Verify with Stripe that the payment succeeded
+        $stripeKey = config('services.stripe.secret');
+        if ($stripeKey) {
+            try {
+                \Stripe\Stripe::setApiKey($stripeKey);
+                $intent = \Stripe\PaymentIntent::retrieve($request->payment_intent_id);
+
+                if ($intent->status === 'succeeded') {
+                    $payment->update(['status' => 'succeeded']);
+                    $payment->booking->update(['status' => 'confirmed']);
+                } elseif ($intent->status === 'requires_payment_method') {
+                    $payment->update(['status' => 'failed']);
+                    return response()->json(['message' => 'Payment failed.'], 400);
+                }
+            } catch (\Exception $e) {
+                \Log::warning('Stripe verify error: ' . $e->getMessage());
+            }
+        }
+
+        return response()->json(['status' => $payment->fresh()->status]);
     }
 }

@@ -1,7 +1,10 @@
 @php
     $subtotalCents = $booking->items->sum(fn($i) => $i->quantity * $i->unit_price_cents);
     $photoUpgradeCents = $booking->photo_upgrade_count * 2500;
-    $totalCents = $subtotalCents + $photoUpgradeCents;
+    $ticketTotalCents = $subtotalCents + $photoUpgradeCents;
+    $fees = \App\Models\BookingFee::active()->orderBy('sort_order')->get();
+    $feesCents = $fees->sum(fn($f) => $f->calculateFee($ticketTotalCents));
+    $totalCents = $ticketTotalCents + $feesCents;
     $startTime = \Carbon\Carbon::parse($booking->timeSlot->start_time)->format('g:i A');
     $endTime = \Carbon\Carbon::parse($booking->timeSlot->end_time)->format('g:i A');
     $formattedDate = $booking->tour_date->format('F j, Y');
@@ -179,12 +182,39 @@
                 @endif
             </tbody>
         </table>
+        @if($fees->count() > 0)
+        <div class="total-section">
+            <table width="100%" cellpadding="0" cellspacing="0"><tr>
+                <td align="right">
+                    <div class="total-box" style="min-width:260px;">
+                        <table width="100%" cellpadding="4" cellspacing="0">
+                            <tr>
+                                <td class="total-label">Subtotal</td>
+                                <td style="text-align:right;font-weight:500;color:#fafafa;">${{ number_format($ticketTotalCents / 100, 2) }}</td>
+                            </tr>
+                            @foreach($fees as $fee)
+                            <tr>
+                                <td class="total-label">{{ $fee->name }}</td>
+                                <td style="text-align:right;font-weight:500;color:#fafafa;">${{ number_format($fee->calculateFee($ticketTotalCents) / 100, 2) }}</td>
+                            </tr>
+                            @endforeach
+                            <tr style="border-top:1px solid #27272a;">
+                                <td class="total-label" style="padding-top:8px;">Total Amount</td>
+                                <td style="text-align:right;padding-top:8px;"><span class="total-amount">${{ number_format($totalCents / 100, 2) }}</span></td>
+                            </tr>
+                        </table>
+                    </div>
+                </td>
+            </tr></table>
+        </div>
+        @else
         <div class="total-section">
             <div class="total-box">
                 <span class="total-label">Total Amount</span>
                 <span class="total-amount">${{ number_format($totalCents / 100, 2) }}</span>
             </div>
         </div>
+        @endif
     </div>
 
     <!-- Guests -->

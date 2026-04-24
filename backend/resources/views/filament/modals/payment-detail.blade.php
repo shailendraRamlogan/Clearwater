@@ -11,10 +11,22 @@
             </div>
         </div>
 
+        @php
+            $booking = $payment->booking;
+            $ticketCents = $booking->total_price_cents ?? 0;
+            $feesCents = $booking->fees_cents ?? 0;
+            $grandCents = $ticketCents + $feesCents;
+        @endphp
+
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem;">
             <div>
-                <p style="font-size:0.7rem;color:#a1a1aa;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;margin-bottom:0.375rem;">Amount</p>
+                <p style="font-size:0.7rem;color:#a1a1aa;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;margin-bottom:0.375rem;">Amount Charged</p>
                 <p style="font-size:1.25rem;font-weight:700;color:#fafafa;">${{ number_format($payment->amount_cents / 100, 2) }}</p>
+                @if($feesCents > 0)
+                    <p style="font-size:0.75rem;color:#a1a1aa;margin-top:0.25rem;">
+                        Tickets: ${{ number_format($ticketCents / 100, 2) }} + Fees: ${{ number_format($feesCents / 100, 2) }}
+                    </p>
+                @endif
             </div>
             <div style="text-align:right;">
                 <p style="font-size:0.7rem;color:#a1a1aa;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;margin-bottom:0.375rem;">Status</p>

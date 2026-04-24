@@ -63,8 +63,25 @@ class BookingResource extends Resource
                             ->disabled()
                             ->dehydrated(false),
                         Forms\Components\TextInput::make('total_price_display')
-                            ->label('Total Price')
+                            ->label('Ticket Total')
                             ->formatStateUsing(fn ($record) => $record ? '$' . number_format($record->total_price_cents / 100, 2) : '$0.00')
+                            ->disabled()
+                            ->dehydrated(false),
+                        Forms\Components\TextInput::make('fees_display')
+                            ->label('Fees')
+                            ->formatStateUsing(function ($record) {
+                                if (!$record || !$record->fees_cents) return '$0.00';
+                                return '$' . number_format($record->fees_cents / 100, 2);
+                            })
+                            ->disabled()
+                            ->dehydrated(false),
+                        Forms\Components\TextInput::make('grand_total_display')
+                            ->label('Grand Total')
+                            ->formatStateUsing(function ($record) {
+                                if (!$record) return '$0.00';
+                                $grand = ($record->total_price_cents ?? 0) + ($record->fees_cents ?? 0);
+                                return '$' . number_format($grand / 100, 2);
+                            })
                             ->disabled()
                             ->dehydrated(false),
                         Forms\Components\TextInput::make('photo_upgrade_count')
@@ -92,6 +109,7 @@ class BookingResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->modifyQueryUsing(fn ($query) => $query->with(['guests', 'items']))
             ->columns([
                 Tables\Columns\TextColumn::make('booking_ref')->searchable(),
                 Tables\Columns\TextColumn::make('tour_date')->date(),
@@ -106,9 +124,24 @@ class BookingResource extends Resource
                         'completed' => 'info',
                         default => 'gray',
                     }),
+                Tables\Columns\TextColumn::make('complete_guests_count')
+                    ->label('Guests')
+                    ->badge()
+                    ->color(function ($record) {
+                        $total = $record->guests_count;
+                        $complete = $record->complete_guests_count;
+                        return $complete >= $total ? 'success' : ($complete === 1 ? 'warning' : 'danger');
+                    })
+                    ->formatStateUsing(fn ($record) => $record->complete_guests_count . ' / ' . $record->guests_count),
+                Tables\Columns\TextColumn::make('grand_total')
+                    ->label('Total')
+                    ->formatStateUsing(fn ($record) => '$' . number_format((($record->total_price_cents ?? 0) + ($record->fees_cents ?? 0)) / 100, 2)),
+                Tables\Columns\TextColumn::make('fees_cents')
+                    ->label('Fees')
+                    ->formatStateUsing(fn ($record) => '$' . number_format(($record->fees_cents ?? 0) / 100, 2)),
                 Tables\Columns\TextColumn::make('total_price_cents')
-                    ->money('usd', divideBy: 100)
-                    ->label('Total'),
+                    ->label('Payout')
+                    ->formatStateUsing(fn ($record) => '$' . number_format(($record->total_price_cents ?? 0) / 100, 2)),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('status')

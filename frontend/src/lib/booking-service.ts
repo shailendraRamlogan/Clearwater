@@ -60,6 +60,8 @@ const MOCK_BOOKINGS: Booking[] = [
     special_occasion: true,
     special_comment: "Anniversary celebration! 🎉",
     total_price: 725,
+    fees_cents: 0,
+    fees_breakdown: [],
     status: "confirmed",
     created_at: new Date(Date.now() - 3600000).toISOString(),
     is_confirmed: true,
@@ -78,6 +80,8 @@ const MOCK_BOOKINGS: Booking[] = [
     special_occasion: false,
     special_comment: "",
     total_price: 900,
+    fees_cents: 0,
+    fees_breakdown: [],
     status: "confirmed",
     created_at: new Date(Date.now() - 7200000).toISOString(),
     is_confirmed: true,
@@ -95,6 +99,8 @@ const MOCK_BOOKINGS: Booking[] = [
     special_occasion: false,
     special_comment: "",
     total_price: 275,
+    fees_cents: 0,
+    fees_breakdown: [],
     status: "pending",
     created_at: new Date(Date.now() - 1800000).toISOString(),
     is_confirmed: false,
@@ -113,6 +119,8 @@ const MOCK_BOOKINGS: Booking[] = [
     special_occasion: true,
     special_comment: "Daughter's 10th birthday! Can we arrange a small cake?",
     total_price: 1175,
+    fees_cents: 0,
+    fees_breakdown: [],
     status: "confirmed",
     created_at: new Date(Date.now() - 600000).toISOString(),
     is_confirmed: true,
@@ -170,13 +178,29 @@ export async function createBooking(payload: {
         payload.child_count * 150 +
         (payload.package_upgrade ? (payload.adult_count + payload.child_count) * 75 : 0),
       status: "confirmed",
+      fees_cents: 0,
+      fees_breakdown: [],
       is_confirmed: true,
       needs_confirmation: false,
       created_at: new Date().toISOString(),
     };
   }
   const { data } = await api.post("/bookings", payload);
-  return data.booking;
+  const booking = data.booking;
+  // Attach Stripe payment info for payment flow
+  if (data.payment?.client_secret) {
+    (booking as Record<string, unknown>).client_secret = data.payment.client_secret;
+    (booking as Record<string, unknown>).stripe_intent_id = data.payment.stripe_intent_id;
+  }
+  return booking;
+}
+
+export async function confirmPayment(bookingRef: string, paymentIntentId: string): Promise<{ status: string }> {
+  const { data } = await api.post("/bookings/confirm-payment", {
+    booking_ref: bookingRef,
+    payment_intent_id: paymentIntentId,
+  });
+  return data;
 }
 
 export async function getBookings(date?: string): Promise<Booking[]> {
@@ -237,9 +261,9 @@ export async function unblockSchedule(payload: {
   await api.post("/schedules/unblock", payload);
 }
 
-export async function getPricing(): Promise<{ adult: number; child: number; upgrade: number }> {
+export async function getPricing(): Promise<{ adult: number; child: number; upgrade: number; fees: { name: string; type: string; value: number }[] }> {
   const { data } = await api.get("/pricing");
-  return data.pricing;
+  return data;
 }
 
 export async function getSchedulePdfUrl(date: string): Promise<string> {

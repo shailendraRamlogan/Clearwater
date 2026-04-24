@@ -17,6 +17,10 @@ interface BookingLookup {
   guest: { first_name: string; last_name: string; email: string };
   items: { ticket_type: string; quantity: number; unit_price: number }[];
   total_price: number;
+  subtotal: number;
+  fees_cents: number;
+  grand_total: number;
+  fees_breakdown: { name: string; type: string; amount_cents: number; display: string }[];
   status: string;
   package_upgrade: boolean;
   special_occasion: boolean;
@@ -48,6 +52,10 @@ function BookingConfirmationContent() {
           guest: b.guest,
           items: b.items,
           total_price: b.total_price,
+          subtotal: b.subtotal,
+          fees_cents: b.fees_cents,
+          grand_total: b.grand_total,
+          fees_breakdown: b.fees_breakdown || [],
           status: b.status,
           package_upgrade: b.package_upgrade,
           special_occasion: b.special_occasion,
@@ -140,12 +148,34 @@ function BookingConfirmationContent() {
                 {booking.status}
               </span>
             </div>
-            <div className="border-t pt-3 flex justify-between">
-              <span className="font-semibold text-lg">Total</span>
-              <span className="text-2xl font-bold text-ocean-700">
-                {formatCurrency(booking.total_price)}
-              </span>
-            </div>
+            {booking.fees_breakdown && booking.fees_breakdown.length > 0 && (
+              <>
+                <div className="flex justify-between">
+                  <span className="text-ocean-500">Subtotal</span>
+                  <span className="font-medium">{formatCurrency(booking.subtotal)}</span>
+                </div>
+                {booking.fees_breakdown.map((fee, i) => (
+                  <div key={i} className="flex justify-between">
+                    <span className="text-ocean-500">{fee.name} ({fee.display})</span>
+                    <span className="font-medium">{formatCurrency(fee.amount_cents / 100)}</span>
+                  </div>
+                ))}
+                <div className="border-t pt-3 flex justify-between">
+                  <span className="font-semibold text-lg">Total</span>
+                  <span className="text-2xl font-bold text-ocean-700">
+                    {formatCurrency(booking.grand_total)}
+                  </span>
+                </div>
+              </>
+            )}
+            {(!booking.fees_breakdown || booking.fees_breakdown.length === 0) && (
+              <div className="border-t pt-3 flex justify-between">
+                <span className="font-semibold text-lg">Total</span>
+                <span className="text-2xl font-bold text-ocean-700">
+                  {formatCurrency(booking.total_price)}
+                </span>
+              </div>
+            )}
           </CardContent>
         </Card>
 

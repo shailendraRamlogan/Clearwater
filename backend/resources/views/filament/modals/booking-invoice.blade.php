@@ -1,7 +1,10 @@
 @php
     $subtotalCents = $booking->items->sum(fn($i) => $i->quantity * $i->unit_price_cents);
     $photoUpgradeCents = $booking->photo_upgrade_count * 2500;
-    $totalCents = $subtotalCents + $photoUpgradeCents;
+    $ticketTotalCents = $subtotalCents + $photoUpgradeCents;
+    $fees = \App\Models\BookingFee::active()->orderBy('sort_order')->get();
+    $feesCents = $fees->sum(fn($f) => $f->calculateFee($ticketTotalCents));
+    $totalCents = $ticketTotalCents + $feesCents;
     $startTime = \Carbon\Carbon::createFromFormat('H:i:s', $booking->timeSlot->start_time)->format('g:i A');
     $endTime = \Carbon\Carbon::createFromFormat('H:i:s', $booking->timeSlot->end_time)->format('g:i A');
     $formattedDate = $booking->tour_date->format('F j, Y');
@@ -158,12 +161,33 @@
                 @endif
             </tbody>
         </table>
+        @if($fees->count() > 0)
+        <div class="inv-total-section">
+            <div class="inv-total-box" style="flex-direction:column; align-items:flex-end; gap:0.35rem; width:50%;">
+                <div style="display:flex; justify-content:space-between; width:100%;">
+                    <span class="inv-total-label">Subtotal</span>
+                    <span style="font-weight:500;">${{ number_format($ticketTotalCents / 100, 2) }}</span>
+                </div>
+                @foreach($fees as $fee)
+                <div style="display:flex; justify-content:space-between; width:100%;">
+                    <span class="inv-total-label">{{ $fee->name }}</span>
+                    <span style="font-weight:500;">${{ number_format($fee->calculateFee($ticketTotalCents) / 100, 2) }}</span>
+                </div>
+                @endforeach
+                <div style="display:flex; justify-content:space-between; width:100%; border-top:1px solid rgba(255,255,255,0.2); padding-top:0.35rem; margin-top:0.15rem;">
+                    <span class="inv-total-label">Total Amount</span>
+                    <span class="inv-total-amount">${{ number_format($totalCents / 100, 2) }}</span>
+                </div>
+            </div>
+        </div>
+        @else
         <div class="inv-total-section">
             <div class="inv-total-box">
                 <span class="inv-total-label">Total Amount</span>
                 <span class="inv-total-amount">${{ number_format($totalCents / 100, 2) }}</span>
             </div>
         </div>
+        @endif
     </div>
 
     <!-- Guests -->

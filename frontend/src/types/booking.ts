@@ -37,6 +37,8 @@ export interface Booking {
   special_occasion: boolean;
   special_comment: string;
   total_price: number;
+  fees_cents: number;
+  fees_breakdown: { name: string; type: string; amount_cents: number; display: string }[];
   status: "pending" | "confirmed" | "cancelled";
   is_confirmed: boolean;
   needs_confirmation: boolean;

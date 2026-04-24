@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Route;
 Route::get('/availability', AvailabilityController::class)->middleware('throttle:60,1');
 Route::get('/pricing', [PricingController::class, 'index'])->middleware('throttle:60,1');
 Route::post('/bookings', [BookingController::class, 'store'])->middleware('throttle:60,1');
+Route::post('/bookings/confirm-payment', [BookingController::class, 'confirmPayment'])->middleware('throttle:30,1');
 Route::get('/bookings/lookup', [BookingController::class, 'lookup'])->middleware('throttle:30,1');
 
 // Admin endpoints (token auth)

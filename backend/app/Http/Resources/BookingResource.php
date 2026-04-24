@@ -25,7 +25,19 @@ class BookingResource extends JsonResource
             'package_upgrade' => $this->photo_upgrade_count > 0,
             'special_occasion' => !empty($this->special_occasion),
             'special_comment' => $this->special_comment ?? '',
-            'total_price' => ($this->total_price_cents ?? 0) / 100,
+            'subtotal' => ($this->total_price_cents ?? 0) / 100,
+            'fees_cents' => $this->fees_cents ?? 0,
+            'grand_total' => (($this->total_price_cents ?? 0) + ($this->fees_cents ?? 0)) / 100,
+            'fees_breakdown' => $this->whenLoaded('items', function () {
+                $subtotalCents = $this->total_price_cents ?? 0;
+                $fees = \App\Models\BookingFee::active()->orderBy('sort_order')->get();
+                return $fees->map(fn ($fee) => [
+                    'name' => $fee->name,
+                    'type' => $fee->type,
+                    'amount_cents' => $fee->calculateFee($subtotalCents),
+                    'display' => $fee->displayValue(),
+                ])->values()->all();
+            }),
             'status' => $this->status,
             'is_confirmed' => $this->status === 'confirmed',
             'needs_confirmation' => $this->status === 'pending',

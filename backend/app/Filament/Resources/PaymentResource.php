@@ -28,6 +28,7 @@ class PaymentResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->modifyQueryUsing(fn ($query) => $query->with('booking'))
             ->columns([
                 Tables\Columns\TextColumn::make('booking.primaryGuest.first_name')
                     ->label('Customer')
@@ -39,8 +40,14 @@ class PaymentResource extends Resource
                     ->searchable()
                     ->label('Booking'),
                 Tables\Columns\TextColumn::make('amount_cents')
-                    ->money('usd', divideBy: 100)
-                    ->label('Amount'),
+                    ->label('Total')
+                    ->formatStateUsing(fn ($record) => '$' . number_format($record->amount_cents / 100, 2)),
+                Tables\Columns\TextColumn::make('booking.fees_cents')
+                    ->label('Fees')
+                    ->formatStateUsing(fn ($record) => '$' . number_format(($record->booking->fees_cents ?? 0) / 100, 2)),
+                Tables\Columns\TextColumn::make('booking.total_price_cents')
+                    ->label('Payout')
+                    ->formatStateUsing(fn ($record) => '$' . number_format(($record->booking->total_price_cents ?? 0) / 100, 2)),
                 Tables\Columns\TextColumn::make('status')
                     ->badge()
                     ->color(fn ($state) => match ($state) {

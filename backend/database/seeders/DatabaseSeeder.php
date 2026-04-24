@@ -18,6 +18,7 @@ class DatabaseSeeder extends Seeder
         $this->call([
             BoatSeeder::class,
             TestDataSeeder::class,
+            BookingFeeSeeder::class,
         ]);
     }
 }
