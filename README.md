@@ -10,13 +10,13 @@ clearwater-panel.ourea.tech    → Laravel backend + Filament admin (port 8000)
                                 → /api/* proxied from frontend domain
 ```
 
-- **Backend:** Laravel 12, Filament v3, PostgreSQL, Stripe (payments)
+- **Backend:** Laravel 12, Filament v3, PostgreSQL, Stripe (payments), DomPDF (invoices & tickets)
 - **Frontend:** Next.js 14 (App Router), Tailwind CSS, Zustand, Stripe Elements
 - **Admin:** Filament v3 panel at `/admin` — bookings, passenger manifests, guest management, reports
 
 ## Prerequisites
 
-- PHP 8.3+ with extensions: `pdo_pgsql`, `mbstring`, `xml`, `curl`, `bcmath`
+- PHP 8.3+ with extensions: `pdo_pgsql`, `mbstring`, `xml`, `curl`, `bcmath`, `gd`
 - Node.js 22+
 - PostgreSQL 15+
 - Nginx
@@ -63,7 +63,6 @@ ADMIN_TOKEN=<generate-a-secure-random-string>
 # Used to authenticate admin API calls. Frontend stores this in localStorage.
 
 STRIPE_SECRET_KEY=sk_test_...      # Stripe secret key (test or live)
-STRIPE_WEBHOOK_SECRET=whsec_...   # Stripe webhook signing secret
 
 # Email (optional — defaults to log driver)
 MAIL_MAILER=smtp
@@ -201,6 +200,9 @@ sudo certbot --nginx -d clearwater.ourea.tech -d clearwater-panel.ourea.tech
 | POST | `/api/schedules/block` | Admin | Block a time slot |
 | POST | `/api/schedules/unblock` | Admin | Unblock a time slot |
 | GET | `/api/schedules/blocked?month=YYYY-MM` | Admin | Get blocked slots |
+| POST | `/api/confirm-payment` | None | Verify Stripe payment |
+| GET | `/api/tickets/pdf?ref=<booking_id>` | None | Download ticket PDF |
+| GET | `/api/tickets/preview?ref=<booking_id>` | None | Preview ticket data (JSON) |
 
 Admin endpoints require `Authorization: Bearer <ADMIN_TOKEN>` header.
 
@@ -234,6 +236,9 @@ Admin endpoints require `Authorization: Bearer <ADMIN_TOKEN>` header.
 - **No `<style>` blocks in Blade:** Blade parses `@media` as a directive, silently corrupting views. Always use inline styles.
 - **`wire:model.defer`** for filter inputs; `wire:change` only for dropdown refresh handlers.
 - **Booking prices** are stored in cents (`config/pricing.php`). API returns dollars.
+- **Booking fees** managed via admin panel (BookingFee resource) — supports flat, percent, or combined (e.g. "5% + $0.30").
+- **Ticket QR codes** generated via `chillerlan/php-qrcode` v6 (GD PNG output). Requires `php-gd`.
+- **Stripe payments** verified client-side + `confirmPayment` endpoint — no webhook required.
 - **Rate limiting:** 60/min public, 30/min lookup, 120/min admin routes.
 
 ## Project Structure
@@ -247,7 +252,7 @@ Clearwater/
 │   │   ├── Http/Resources/    # API resource transformers
 │   │   ├── Livewire/          # GuestEditor component
 │   │   ├── Models/            # Booking, BookingGuest, TimeSlot, Boat, etc.
-│   │   └── Services/          # EmailService
+│   │   └── Services/          # EmailService, TicketService, FeeService
 │   ├── config/
 │   │   ├── cors.php           # CORS origins
 │   │   └── pricing.php        # Ticket prices (cents)
@@ -257,7 +262,7 @@ Clearwater/
 │   ├── resources/views/
 │   │   ├── filament/pages/    # Custom Filament page views
 │   │   ├── livewire/          # Guest editor Blade view
-│   │   └── pdf/               # Passenger manifest PDF template
+│   │   └── pdf/               # Booking invoice, ticket, passenger manifest templates
 │   └── routes/
 │       ├── api.php            # API routes
 │       └── web.php            # Filament routes
