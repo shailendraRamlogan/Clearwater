@@ -10,6 +10,15 @@ class TimeSlot extends Model
     protected $keyType = 'string';
     public $incrementing = false;
 
+    protected static function booted(): void
+    {
+        static::creating(function (TimeSlot $slot) {
+            if (empty($slot->id)) {
+                $slot->id = (string) \Str::uuid();
+            }
+        });
+    }
+
     protected $fillable = ['id', 'boat_id', 'day', 'start_time', 'end_time', 'max_capacity', 'is_blocked', 'effective_from', 'effective_until'];
 
     protected $casts = [

@@ -6,11 +6,15 @@ use App\Http\Controllers\Api\PricingController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\TicketController;
 use App\Http\Controllers\Api\ScheduleController;
+use App\Http\Controllers\Api\GalleryPhotoController;
+use App\Http\Controllers\Api\TicketTypeController;
 use Illuminate\Support\Facades\Route;
 
 // Public endpoints
+Route::get('/gallery-photos', [GalleryPhotoController::class, 'index'])->middleware('throttle:60,1');
 Route::get('/availability', AvailabilityController::class)->middleware('throttle:60,1');
 Route::get('/pricing', [PricingController::class, 'index'])->middleware('throttle:60,1');
+Route::get('/ticket-types', TicketTypeController::class)->middleware('throttle:60,1');
 Route::post('/bookings', [BookingController::class, 'store'])->middleware('throttle:60,1');
 Route::post('/bookings/confirm-payment', [BookingController::class, 'confirmPayment'])->middleware('throttle:30,1');
 Route::get('/bookings/lookup', [BookingController::class, 'lookup'])->middleware('throttle:30,1');

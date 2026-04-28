@@ -19,6 +19,7 @@ class DatabaseSeeder extends Seeder
             BoatSeeder::class,
             TestDataSeeder::class,
             BookingFeeSeeder::class,
+            GalleryPhotoSeeder::class,
         ]);
     }
 }

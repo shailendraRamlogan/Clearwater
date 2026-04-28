@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Camera,
@@ -14,8 +15,20 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/utils";
+import { getTicketTypes } from "@/lib/booking-service";
+import type { TicketType } from "@/types/booking";
 
 export default function HomePage() {
+  const [ticketTypes, setTicketTypes] = useState<TicketType[]>([]);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    getTicketTypes().then((types) => {
+      if (types.length > 0) setTicketTypes(types);
+    }).catch(() => {});
+  }, []);
+
   return (
     <div>
       {/* Hero */}
@@ -120,79 +133,53 @@ export default function HomePage() {
             </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-            <Card className="h-full border border-ocean-100 overflow-hidden">
-              <div className="h-1 bg-ocean-700" />
-              <CardHeader className="text-center pb-2">
-                <CardTitle className="text-xl">Adult Tour</CardTitle>
-                <div className="mt-4">
-                  <span className="text-4xl font-bold text-ocean-700">
-                    {formatCurrency(200)}
-                  </span>
-                  <span className="text-ocean-400 ml-1">/ person</span>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-4">
-                <ul className="space-y-3 mb-8">
-                  {[
-                    "Multiple action photos included",
-                    "Homemade island lemonade (2 choices)",
-                    "Bahamian beers (up to 3)",
-                    "Fruit-flavored Raddlers (up to 3)",
-                    "Caribbean rum tasting",
-                    "Light snacks provided",
-                  ].map((item, i) => (
-                    <li key={i} className="flex items-start gap-3">
-                      <CheckCircle className="h-4 w-4 text-ocean-500 shrink-0 mt-0.5" />
-                      <span className="text-sm text-ocean-600">{item}</span>
-                    </li>
-                  ))}
-                </ul>
-                <Link href="/book" className="block">
-                  <Button variant="cta" className="w-full" size="lg">
-                    Book Adult Tour
-                  </Button>
-                </Link>
-              </CardContent>
-            </Card>
+            {!mounted || ticketTypes.length === 0 ? (
+              <div className="col-span-2 text-center py-12 text-ocean-400">Loading tour packages…</div>
+            ) : (
+              ticketTypes.map((type) => {
+                const isAdult = type.name.toLowerCase() === 'adult';
+                const priceDollars = type.price_cents / 100;
+                const accentClass = isAdult ? 'bg-ocean-700' : 'bg-sand-400';
+                const checkColor = isAdult ? 'text-ocean-500' : 'text-sand-500';
+                const label = isAdult ? '/ person' : '/ child';
 
-            <Card className="h-full border border-ocean-100 overflow-hidden">
-              <div className="h-1 bg-sand-400" />
-              <CardHeader className="text-center pb-2">
-                <CardTitle className="text-xl">Child Tour</CardTitle>
-                <div className="mt-4">
-                  <span className="text-4xl font-bold text-ocean-700">
-                    {formatCurrency(150)}
-                  </span>
-                  <span className="text-ocean-400 ml-1">/ child</span>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-4">
-                <ul className="space-y-3 mb-8">
-                  {[
-                    "Multiple action photos included",
-                    "Unleaded lemonade",
-                    "Bottled water",
-                    "Non-alcoholic sparkling beverages",
-                    "Light snacks provided",
-                    "Family-friendly fun",
-                  ].map((item, i) => (
-                    <li key={i} className="flex items-start gap-3">
-                      <CheckCircle className="h-4 w-4 text-sand-500 shrink-0 mt-0.5" />
-                      <span className="text-sm text-ocean-600">{item}</span>
-                    </li>
-                  ))}
-                </ul>
-                <Link href="/book" className="block">
-                  <Button
-                    variant="outline"
-                    className="w-full border-ocean-300 text-ocean-700 hover:bg-ocean-50"
-                    size="lg"
-                  >
-                    Book Child Tour
-                  </Button>
-                </Link>
-              </CardContent>
-            </Card>
+                return (
+                  <Card key={type.id} className="h-full border border-ocean-100 overflow-hidden">
+                    <div className={`h-1 ${accentClass}`} />
+                    <CardHeader className="text-center pb-2">
+                      <CardTitle className="text-xl">{type.name} Tour</CardTitle>
+                      <div className="mt-4">
+                        <span className="text-4xl font-bold text-ocean-700">
+                          {formatCurrency(priceDollars)}
+                        </span>
+                        <span className="text-ocean-400 ml-1">{label}</span>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="pt-4">
+                      <ul className="space-y-3 mb-8">
+                        {(type.features || [])
+                          .sort((a, b) => a.sort_order - b.sort_order)
+                          .map((feature, fi) => (
+                            <li key={fi} className="flex items-start gap-3">
+                              <CheckCircle className={`h-4 w-4 ${checkColor} shrink-0 mt-0.5`} />
+                              <span className="text-sm text-ocean-600">{feature.label}</span>
+                            </li>
+                          ))}
+                      </ul>
+                      <Link href="/book" className="block">
+                        <Button
+                          variant={isAdult ? 'cta' : 'outline'}
+                          className={isAdult ? 'w-full' : 'w-full border-ocean-300 text-ocean-700 hover:bg-ocean-50'}
+                          size="lg"
+                        >
+                          Book {type.name} Tour
+                        </Button>
+                      </Link>
+                    </CardContent>
+                  </Card>
+                );
+              })
+            )}
           </div>
         </div>
       </section>

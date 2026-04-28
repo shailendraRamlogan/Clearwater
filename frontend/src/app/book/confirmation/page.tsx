@@ -97,8 +97,8 @@ function BookingConfirmationContent() {
   if (!booking) return null;
 
   return (
-    <div className="section-container py-8 sm:py-20">
-      <div className="max-w-lg mx-auto text-center">
+    <div className="section-container py-8 sm:py-20 max-sm:min-h-[calc(100dvh-65px)] max-sm:flex max-sm:flex-col max-sm:justify-center max-sm:px-6">
+      <div className="max-w-lg mx-auto text-center w-full">
         <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-6">
           <CheckCircle className="h-8 w-8 text-green-500" />
         </div>

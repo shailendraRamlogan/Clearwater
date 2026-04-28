@@ -3,7 +3,9 @@ import type {
   TimeSlot,
   BookingGuest,
   BookingItem,
+  TicketType,
 } from "@/types/booking";
+import { getTicketTypes } from "@/lib/booking-service";
 
 interface BookingState {
   // Step 1: Date
@@ -17,16 +19,22 @@ interface BookingState {
   setAvailableSlots: (slots: TimeSlot[]) => void;
 
   // Step 3: Tickets
-  adultCount: number;
-  setAdultCount: (count: number) => void;
-  childCount: number;
-  setChildCount: (count: number) => void;
+  ticketTypes: TicketType[];
+  setTicketTypes: (types: TicketType[]) => void;
+  ticketCounts: Record<string, number>;
+  setTicketCount: (typeId: string, count: number) => void;
   packageUpgrade: boolean;
   setPackageUpgrade: (upgrade: boolean) => void;
   specialOccasion: boolean;
   setSpecialOccasion: (occasion: boolean) => void;
   specialComment: string;
   setSpecialComment: (comment: string) => void;
+
+  // Backward-compatible getters
+  adultCount: number;
+  setAdultCount: (count: number) => void;
+  childCount: number;
+  setChildCount: (count: number) => void;
 
   // Step 4: Guests (array)
   guests: BookingGuest[];
@@ -52,13 +60,15 @@ interface BookingState {
   getItems: () => BookingItem[];
   totalGuests: () => number;
   missingGuestCount: () => number;
+  getTicketPrice: (typeId: string) => number;
+
+  // Init
+  init: () => void;
 
   // Reset
   reset: () => void;
 }
 
-const ADULT_PRICE = 200;
-const CHILD_PRICE = 150;
 const UPGRADE_PRICE = 75;
 
 const emptyGuest = (): BookingGuest => ({
@@ -73,14 +83,19 @@ const initialState = {
   selectedSlot: undefined,
   availableSlots: [],
   pricingFees: [],
-  adultCount: 0,
-  childCount: 0,
+  ticketTypes: [] as TicketType[],
+  ticketCounts: {} as Record<string, number>,
   packageUpgrade: false,
   specialOccasion: false,
   specialComment: "",
   guests: [emptyGuest()],
   currentStep: 1,
 };
+
+// Helper: find ticket type by name (case-insensitive)
+function findTicketTypeByName(types: TicketType[], name: string): TicketType | undefined {
+  return types.find((t) => t.name.toLowerCase() === name.toLowerCase());
+}
 
 export const useBookingStore = create<BookingState>((set, get) => ({
   ...initialState,
@@ -89,11 +104,35 @@ export const useBookingStore = create<BookingState>((set, get) => ({
   setSelectedSlot: (slot) => set({ selectedSlot: slot }),
   setAvailableSlots: (slots) => set({ availableSlots: slots }),
   setPricingFees: (fees) => set({ pricingFees: fees }),
-  setAdultCount: (count) => set({ adultCount: Math.max(0, count) }),
-  setChildCount: (count) => set({ childCount: Math.max(0, count) }),
+  setTicketTypes: (types) => set({ ticketTypes: types }),
+  setTicketCount: (typeId, count) =>
+    set((state) => ({
+      ticketCounts: { ...state.ticketCounts, [typeId]: Math.max(0, count) },
+    })),
   setPackageUpgrade: (upgrade) => set({ packageUpgrade: upgrade }),
   setSpecialOccasion: (occasion) => set({ specialOccasion: occasion }),
   setSpecialComment: (comment) => set({ specialComment: comment }),
+
+  // Backward-compatible getters/setters
+  get adultCount() {
+    return get().ticketCounts[findTicketTypeByName(get().ticketTypes, "Adult")?.id ?? ""] ?? 0;
+  },
+  setAdultCount: (count) => {
+    const adultType = findTicketTypeByName(get().ticketTypes, "Adult");
+    if (adultType) {
+      get().setTicketCount(adultType.id, count);
+    }
+  },
+  get childCount() {
+    return get().ticketCounts[findTicketTypeByName(get().ticketTypes, "Child")?.id ?? ""] ?? 0;
+  },
+  setChildCount: (count) => {
+    const childType = findTicketTypeByName(get().ticketTypes, "Child");
+    if (childType) {
+      get().setTicketCount(childType.id, count);
+    }
+  },
+
   setGuestField: (index, field, value) =>
     set((state) => {
       const guests = [...state.guests];
@@ -109,14 +148,35 @@ export const useBookingStore = create<BookingState>((set, get) => ({
   nextStep: () => set((state) => ({ currentStep: Math.min(5, state.currentStep + 1) })),
   prevStep: () => set((state) => ({ currentStep: Math.max(1, state.currentStep - 1) })),
 
+  init: () => {
+    // Fetch ticket types on init
+    getTicketTypes()
+      .then((types) => {
+        if (types.length > 0) {
+          set({ ticketTypes: types });
+        }
+      })
+      .catch(() => {});
+  },
+
+  getTicketPrice: (typeId) => {
+    const type = get().ticketTypes.find((t) => t.id === typeId);
+    return type ? type.price_cents / 100 : 0;
+  },
+
   getTotal: () => {
     return get().getSubtotal();
   },
 
   getSubtotal: () => {
     const state = get();
-    const ticketTotal = state.adultCount * ADULT_PRICE + state.childCount * CHILD_PRICE;
-    const upgradeTotal = state.packageUpgrade ? (state.adultCount + state.childCount) * UPGRADE_PRICE : 0;
+    let ticketTotal = 0;
+    for (const type of state.ticketTypes) {
+      const count = state.ticketCounts[type.id] ?? 0;
+      ticketTotal += count * (type.price_cents / 100);
+    }
+    const totalTickets = Object.values(state.ticketCounts).reduce((s, c) => s + c, 0);
+    const upgradeTotal = state.packageUpgrade ? totalTickets * UPGRADE_PRICE : 0;
     return ticketTotal + upgradeTotal;
   },
 
@@ -147,24 +207,36 @@ export const useBookingStore = create<BookingState>((set, get) => ({
   getItems: () => {
     const state = get();
     const items: BookingItem[] = [];
-    if (state.adultCount > 0) {
-      items.push({ ticket_type: "adult", quantity: state.adultCount, unit_price: ADULT_PRICE });
-    }
-    if (state.childCount > 0) {
-      items.push({ ticket_type: "child", quantity: state.childCount, unit_price: CHILD_PRICE });
+    for (const type of state.ticketTypes) {
+      const count = state.ticketCounts[type.id] ?? 0;
+      if (count > 0) {
+        items.push({
+          ticket_type: type.name.toLowerCase() as "adult" | "child",
+          quantity: count,
+          unit_price: type.price_cents / 100,
+        });
+      }
     }
     if (state.packageUpgrade) {
-      items.push({
-        ticket_type: "adult" as const,
-        quantity: state.adultCount + state.childCount,
-        unit_price: UPGRADE_PRICE,
-      });
+      const totalTickets = Object.values(state.ticketCounts).reduce((s, c) => s + c, 0);
+      if (totalTickets > 0) {
+        items.push({
+          ticket_type: "adult" as const,
+          quantity: totalTickets,
+          unit_price: UPGRADE_PRICE,
+        });
+      }
     }
     return items;
   },
 
-  totalGuests: () => get().adultCount + get().childCount,
-  missingGuestCount: () => Math.max(0, (get().adultCount + get().childCount) - get().guests.length),
+  totalGuests: () => {
+    return Object.values(get().ticketCounts).reduce((s, c) => s + c, 0);
+  },
+  missingGuestCount: () => {
+    const total = Object.values(get().ticketCounts).reduce((s, c) => s + c, 0);
+    return Math.max(0, total - get().guests.length);
+  },
 
   reset: () => set(initialState),
 }));

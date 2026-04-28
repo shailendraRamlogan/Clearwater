@@ -54,6 +54,15 @@ export interface DailyReport {
   bookings: Booking[];
 }
 
+export interface TicketType {
+  id: string;
+  name: string;
+  description: string | null;
+  price_cents: number;
+  sort_order: number;
+  features: { icon: string; label: string; sort_order: number }[];
+}
+
 export interface ScheduleBlock {
   id: string;
   date: string;

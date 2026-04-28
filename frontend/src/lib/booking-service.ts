@@ -1,4 +1,4 @@
-import type { TimeSlot, Booking, DailyReport } from "@/types/booking";
+import type { TimeSlot, Booking, DailyReport, TicketType } from "@/types/booking";
 import api from "@/lib/api";
 
 // Static mock time slots matching the Clear Boat schedule
@@ -259,6 +259,18 @@ export async function unblockSchedule(payload: {
   time_slot_id?: string;
 }): Promise<void> {
   await api.post("/schedules/unblock", payload);
+}
+
+export async function getTicketTypes(): Promise<TicketType[]> {
+  if (USE_MOCK) {
+    await delay(300);
+    return [
+      { id: 'adult', name: 'Adult', description: 'Ages 13+', price_cents: 20000, sort_order: 1, features: [] },
+      { id: 'child', name: 'Child', description: 'Ages 3-12', price_cents: 15000, sort_order: 2, features: [] },
+    ];
+  }
+  const { data } = await api.get('/ticket-types');
+  return data;
 }
 
 export async function getPricing(): Promise<{ adult: number; child: number; upgrade: number; fees: { name: string; type: string; value: number }[] }> {

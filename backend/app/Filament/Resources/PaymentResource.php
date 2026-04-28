@@ -35,7 +35,14 @@ class PaymentResource extends Resource
                     ->formatStateUsing(fn ($record) => $record->booking->primaryGuest
                         ? $record->booking->primaryGuest->first_name . ' ' . $record->booking->primaryGuest->last_name
                         : '—')
-                    ->searchable(),
+                    ->description(fn ($record) => $record->booking->primaryGuest?->email)
+                    ->searchable(query: function ($query, $search) {
+                        $query->whereHas('booking.primaryGuest', function ($q) use ($search) {
+                            $q->where('first_name', 'ilike', "%{$search}%")
+                              ->orWhere('last_name', 'ilike', "%{$search}%")
+                              ->orWhere('email', 'ilike', "%{$search}%");
+                        });
+                    }),
                 Tables\Columns\TextColumn::make('booking.booking_ref')
                     ->searchable()
                     ->label('Booking'),

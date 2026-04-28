@@ -17,6 +17,15 @@ import {
   Plus,
   PartyPopper,
 } from "lucide-react";
+import {
+  Camera, Citrus, Beer, Grape, Wine, Cookie, GlassWater,
+  // fallback icons for unknown feature icons
+  Sparkles,
+} from "lucide-react";
+
+const FEATURE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  Camera, Citrus, Beer, Grape, Wine, Cookie, Juice: GlassWater,
+};
 import { loadStripe } from "@stripe/stripe-js";
 import { CardElement, Elements, useStripe, useElements } from "@stripe/react-stripe-js";
 import { Button } from "@/components/ui/button";
@@ -28,7 +37,7 @@ import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useBookingStore } from "@/stores/booking-store";
 import { ModernCalendar } from "@/components/ui/calendar";
-import { getAvailability, createBooking, getPricing, confirmPayment } from "@/lib/booking-service";
+import { getAvailability, createBooking, getPricing, confirmPayment, getTicketTypes } from "@/lib/booking-service";
 // import api from "@/lib/api";
 import { formatCurrency, formatTime } from "@/lib/utils";
 import { toast } from "sonner";
@@ -64,28 +73,43 @@ function BookingForm() {
   const router = useRouter();
   const stripe = useStripe();
   const elements = useElements();
-  const [adultExpanded, setAdultExpanded] = useState(false);
-  const [childExpanded, setChildExpanded] = useState(false);
+  const [expandedTypes, setExpandedTypes] = useState<Record<string, boolean>>({});
+  const [dismissedTypes, setDismissedTypes] = useState<Record<string, boolean>>({});
+  const [ticketTypesLoaded, setTicketTypesLoaded] = useState(false);
   const [activeGuest, setActiveGuest] = useState(0);
   const [confirmEmail, setConfirmEmail] = useState("");
-  const adultDismissed = useRef(false);
-  const childDismissed = useRef(false);
   const lastFetchedDate = useRef<string | null>(null);
 
-  // Fetch pricing fees on mount
+  // Fetch pricing fees and ticket types on mount
   useEffect(() => {
     getPricing().then((p) => {
       if (p.fees) store.setPricingFees(p.fees);
     }).catch(() => {});
+    getTicketTypes().then((types) => {
+      if (types.length > 0) store.setTicketTypes(types);
+      setTicketTypesLoaded(true);
+    }).catch(() => { setTicketTypesLoaded(true); });
   }, []);
 
+  // Auto-collapse when count drops to 0
   useEffect(() => {
-    if (store.adultCount === 0) { setAdultExpanded(false); adultDismissed.current = false; }
-  }, [store.adultCount]);
-
-  useEffect(() => {
-    if (store.childCount === 0) { setChildExpanded(false); childDismissed.current = false; }
-  }, [store.childCount]);
+    for (const type of store.ticketTypes) {
+      const count = store.ticketCounts[type.id] ?? 0;
+      if (count === 0) {
+        setExpandedTypes((prev) => {
+          if (!prev[type.id]) return prev;
+          const next = { ...prev };
+          delete next[type.id];
+          return next;
+        });
+        setDismissedTypes((prev) => {
+          const next = { ...prev };
+          delete next[type.id];
+          return next;
+        });
+      }
+    }
+  }, [store.ticketCounts, store.ticketTypes]);
 
   // Reset store when user navigates away from the booking page
   useEffect(() => {
@@ -137,8 +161,8 @@ function BookingForm() {
       const booking = await createBooking({
         tour_date: format(store.selectedDate, "yyyy-MM-dd"),
         time_slot_id: store.selectedSlot.id,
-        adult_count: store.adultCount,
-        child_count: store.childCount,
+        adult_count: store.ticketCounts[store.ticketTypes.find(t => t.name.toLowerCase() === 'adult')?.id ?? ''] ?? 0,
+        child_count: store.ticketCounts[store.ticketTypes.find(t => t.name.toLowerCase() === 'child')?.id ?? ''] ?? 0,
         package_upgrade: store.packageUpgrade,
         special_occasion: store.specialOccasion,
         special_comment: store.specialComment,
@@ -245,8 +269,7 @@ function BookingForm() {
               </p>
               <p>
                 <span className="text-ocean-500">Guests:</span>{" "}
-                {store.adultCount} adult{store.adultCount > 1 ? "s" : ""},{" "}
-                {store.childCount} child{store.childCount !== 1 ? "ren" : ""}
+                {store.totalGuests()} guest{store.totalGuests() > 1 ? "s" : ""}
               </p>
               <p>
                 <span className="text-ocean-500">Total:</span>{" "}
@@ -479,116 +502,85 @@ function BookingForm() {
                 </p>
               </CardHeader>
               <CardContent className="space-y-6">
-                  {/* Adult */}
-                  <div className="rounded-lg overflow-hidden border border-ocean-100">
-                    <button
-                      onClick={() => { if (store.adultCount > 0) { const next = !adultExpanded; setAdultExpanded(next); if (!next) adultDismissed.current = true; else adultDismissed.current = false; } }}
-                      className="w-full p-4 bg-ocean-50 hover:bg-ocean-100/70 transition-colors"
-                    >
-                      {/* Mobile: stacked centered */}
-                      <div className="text-center sm:hidden space-y-3">
-                        <p className="font-semibold flex items-center justify-center gap-2">🍺 Adult</p>
-                        <p className="text-sm text-ocean-500">{formatCurrency(200)} per person</p>
-                        <div className="flex items-center justify-center gap-6">
-                          <Button variant="outline" size="icon" onClick={(e) => { e.stopPropagation(); store.setAdultCount(store.adultCount - 1); if (store.adultCount === 1) setAdultExpanded(false); }} disabled={store.adultCount <= 0}>
-                            <Minus className="h-5 w-5" />
-                          </Button>
-                          <span className="text-2xl font-bold w-10 text-center">{store.adultCount}</span>
-                          <Button variant="outline" size="icon" onClick={(e) => { e.stopPropagation(); store.setAdultCount(store.adultCount + 1); if (!adultDismissed.current) setAdultExpanded(true); }} disabled={store.adultCount + store.childCount >= 10}>
-                            <Plus className="h-5 w-5" />
-                          </Button>
-                        </div>
-                      </div>
-                      {/* Desktop: inline */}
-                      <div className="hidden sm:flex sm:items-center sm:justify-between">
-                        <div>
-                          <p className="font-semibold flex items-center gap-2">🍺 Adult</p>
-                          <p className="text-sm text-ocean-500">{formatCurrency(200)} per person</p>
-                        </div>
-                        <div className="flex items-center gap-4">
-                          {store.adultCount > 0 && <span className="text-xs text-ocean-400 font-medium">Details</span>}
-                          <Button variant="outline" size="icon" onClick={(e) => { e.stopPropagation(); store.setAdultCount(store.adultCount - 1); if (store.adultCount === 1) setAdultExpanded(false); }} disabled={store.adultCount <= 0}>
-                            <Minus className="h-4 w-4" />
-                          </Button>
-                          <span className="text-xl font-bold w-8 text-center">{store.adultCount}</span>
-                          <Button variant="outline" size="icon" onClick={(e) => { e.stopPropagation(); store.setAdultCount(store.adultCount + 1); if (!adultDismissed.current) setAdultExpanded(true); }} disabled={store.adultCount + store.childCount >= 10}>
-                            <Plus className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </button>
-                    {adultExpanded && store.adultCount > 0 && (
-                      <div className="border-t border-ocean-100">
-                        <div className="p-4 bg-white space-y-2 text-sm text-ocean-600">
-                          <p className="font-medium text-ocean-800">Includes (2.5 hour tour):</p>
-                          <ul className="space-y-1.5">
-                            <li className="flex items-start gap-2"><span>📸</span> Multiple action photos (snorkeling, boating, fun poses, sightseeing)</li>
-                            <li className="flex items-start gap-2"><span>🍹</span> Homemade island lemonade — 2 of your choice</li>
-                            <li className="flex items-start gap-2"><span>🍺</span> Bahamian beers (up to 3)</li>
-                            <li className="flex items-start gap-2"><span>🍺</span> Bahamian Raddlers fruit-flavored beers (up to 3)</li>
-                            <li className="flex items-start gap-2"><span>🥃</span> Caribbean rum tasting (banana, coconut, pineapple, peach)</li>
-                            <li className="flex items-start gap-2"><span>🥤</span> Bottled water (x2)</li>
-                            <li className="flex items-start gap-2"><span>🍿</span> Light snacks (variety of potato chips)</li>
-                          </ul>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                  {/* Dynamic Ticket Types */}
+                  {!ticketTypesLoaded ? (
+                    <div className="text-center py-8 text-ocean-400">Loading ticket types…</div>
+                  ) : (
+                  <>
+                  {store.ticketTypes.map((type) => {
+                    const count = store.ticketCounts[type.id] ?? 0;
+                    const isExpanded = !!expandedTypes[type.id];
+                    const isDismissed = !!dismissedTypes[type.id];
+                    const totalGuests = store.totalGuests();
+                    const isAdult = type.name.toLowerCase() === 'adult';
+                    const bgClass = isAdult ? 'bg-ocean-50 hover:bg-ocean-100/70' : 'bg-sand-50 hover:bg-sand-100/70';
+                    const priceDollars = type.price_cents / 100;
+                    const emoji = isAdult ? '🍺' : '🧒';
+                    const priceLabel = isAdult ? 'per person' : 'per child';
 
-                  {/* Child */}
-                  <div className="rounded-lg overflow-hidden border border-ocean-100">
-                    <button
-                      onClick={() => { if (store.childCount > 0) { const next = !childExpanded; setChildExpanded(next); if (!next) childDismissed.current = true; else childDismissed.current = false; } }}
-                      className="w-full p-4 bg-sand-50 hover:bg-sand-100/70 transition-colors"
-                    >
-                      {/* Mobile: stacked centered */}
-                      <div className="text-center sm:hidden space-y-3">
-                        <p className="font-semibold flex items-center justify-center gap-2">🧒 Child</p>
-                        <p className="text-sm text-ocean-500">{formatCurrency(150)} per child</p>
-                        <div className="flex items-center justify-center gap-6">
-                          <Button variant="outline" size="icon" onClick={(e) => { e.stopPropagation(); store.setChildCount(store.childCount - 1); if (store.childCount === 1) setChildExpanded(false); }} disabled={store.childCount <= 0}>
-                            <Minus className="h-5 w-5" />
-                          </Button>
-                          <span className="text-2xl font-bold w-10 text-center">{store.childCount}</span>
-                          <Button variant="outline" size="icon" onClick={(e) => { e.stopPropagation(); store.setChildCount(store.childCount + 1); if (!childDismissed.current) setChildExpanded(true); }} disabled={store.adultCount + store.childCount >= 10}>
-                            <Plus className="h-5 w-5" />
-                          </Button>
-                        </div>
+                    return (
+                      <div key={type.id} className="rounded-lg overflow-hidden border border-ocean-100">
+                        <button
+                          onClick={() => { if (count > 0) { const next = !isExpanded; setExpandedTypes((prev) => ({ ...prev, [type.id]: next })); if (!next) setDismissedTypes((prev) => ({ ...prev, [type.id]: true })); else setDismissedTypes((prev) => ({ ...prev, [type.id]: false })); } }}
+                          className={`w-full p-4 ${bgClass} transition-colors`}
+                        >
+                          {/* Mobile: stacked centered */}
+                          <div className="text-center sm:hidden space-y-3">
+                            <p className="font-semibold flex items-center justify-center gap-2">{emoji} {type.name}</p>
+                            <p className="text-sm text-ocean-500">{formatCurrency(priceDollars)} {priceLabel}</p>
+                            <div className="flex items-center justify-center gap-6">
+                              <Button variant="outline" size="icon" onClick={(e) => { e.stopPropagation(); store.setTicketCount(type.id, count - 1); }} disabled={count <= 0}>
+                                <Minus className="h-5 w-5" />
+                              </Button>
+                              <span className="text-2xl font-bold w-10 text-center">{count}</span>
+                              <Button variant="outline" size="icon" onClick={(e) => { e.stopPropagation(); store.setTicketCount(type.id, count + 1); if (!isDismissed) setExpandedTypes((prev) => ({ ...prev, [type.id]: true })); }} disabled={totalGuests >= 10}>
+                                <Plus className="h-5 w-5" />
+                              </Button>
+                            </div>
+                          </div>
+                          {/* Desktop: inline */}
+                          <div className="hidden sm:flex sm:items-center sm:justify-between">
+                            <div>
+                              <p className="font-semibold flex items-center gap-2">{emoji} {type.name}</p>
+                              <p className="text-sm text-ocean-500">{formatCurrency(priceDollars)} {priceLabel}</p>
+                            </div>
+                            <div className="flex items-center gap-4">
+                              {count > 0 && <span className="text-xs text-ocean-400 font-medium">Details</span>}
+                              <Button variant="outline" size="icon" onClick={(e) => { e.stopPropagation(); store.setTicketCount(type.id, count - 1); }} disabled={count <= 0}>
+                                <Minus className="h-4 w-4" />
+                              </Button>
+                              <span className="text-xl font-bold w-8 text-center">{count}</span>
+                              <Button variant="outline" size="icon" onClick={(e) => { e.stopPropagation(); store.setTicketCount(type.id, count + 1); if (!isDismissed) setExpandedTypes((prev) => ({ ...prev, [type.id]: true })); }} disabled={totalGuests >= 10}>
+                                <Plus className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        </button>
+                        {isExpanded && count > 0 && (type.description || (type.features && type.features.length > 0)) && (
+                          <div className="border-t border-ocean-100">
+                            <div className="p-4 bg-white text-sm text-ocean-600 space-y-3">
+                              {type.description && <p>{type.description}</p>}
+                              {type.features && type.features.length > 0 && (
+                                <ul className="space-y-2">
+                                  {[...type.features]
+                                    .sort((a, b) => a.sort_order - b.sort_order)
+                                    .map((feature, fi) => {
+                                      const IconComponent = FEATURE_ICONS[feature.icon] || Sparkles;
+                                      return (
+                                        <li key={fi} className="flex items-center gap-2">
+                                          <IconComponent className="h-4 w-4 text-ocean-500 shrink-0" />
+                                          <span>{feature.label}</span>
+                                        </li>
+                                      );
+                                    })}
+                                </ul>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      {/* Desktop: inline */}
-                      <div className="hidden sm:flex sm:items-center sm:justify-between">
-                        <div>
-                          <p className="font-semibold flex items-center gap-2">🧒 Child</p>
-                          <p className="text-sm text-ocean-500">{formatCurrency(150)} per child</p>
-                        </div>
-                        <div className="flex items-center gap-4">
-                          {store.childCount > 0 && <span className="text-xs text-ocean-400 font-medium">Details</span>}
-                          <Button variant="outline" size="icon" onClick={(e) => { e.stopPropagation(); store.setChildCount(store.childCount - 1); if (store.childCount === 1) setChildExpanded(false); }} disabled={store.childCount <= 0}>
-                            <Minus className="h-4 w-4" />
-                          </Button>
-                          <span className="text-xl font-bold w-8 text-center">{store.childCount}</span>
-                          <Button variant="outline" size="icon" onClick={(e) => { e.stopPropagation(); store.setChildCount(store.childCount + 1); if (!childDismissed.current) setChildExpanded(true); }} disabled={store.adultCount + store.childCount >= 10}>
-                            <Plus className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </button>
-                    {childExpanded && store.childCount > 0 && (
-                      <div className="border-t border-ocean-100">
-                        <div className="p-4 bg-white space-y-2 text-sm text-ocean-600">
-                          <p className="font-medium text-ocean-800">Includes (2.5 hour tour):</p>
-                          <ul className="space-y-1.5">
-                            <li className="flex items-start gap-2"><span>📸</span> Multiple action photos included</li>
-                            <li className="flex items-start gap-2"><span>🍹</span> Unleaded homemade island lemonade</li>
-                            <li className="flex items-start gap-2"><span>🥤</span> Bottled water</li>
-                            <li className="flex items-start gap-2"><span>🥂</span> Non-alcoholic sparkling beverages</li>
-                            <li className="flex items-start gap-2"><span>🍿</span> Light snacks (variety of potato chips)</li>
-                            <li className="flex items-start gap-2"><span>👨‍👩‍👧‍👦</span> Family-friendly activity</li>
-                          </ul>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                    );
+                  })}
 
                   {/* Package Upgrade */}
                   <div className="flex items-center justify-between p-4 border border-ocean-100 rounded-lg">
@@ -646,17 +638,17 @@ function BookingForm() {
                     <div className="space-y-2">
                       <div className="flex justify-between items-center">
                         <span className="text-ocean-200">Subtotal</span>
-                        <span>{formatCurrency(store.getSubtotal())}</span>
+                        <span className="shrink-0">{formatCurrency(store.getSubtotal())}</span>
                       </div>
                       {store.getFees().map((fee, i) => (
                         <div key={i} className="flex justify-between items-center">
-                          <span className="text-ocean-200">{fee.name} ({fee.type === 'flat' ? `$${(fee.flat_value ?? fee.value).toFixed(2)}` : fee.type === 'both' ? `${fee.value}% + $${(fee.flat_value ?? 0).toFixed(2)}` : `${fee.value}%`})</span>
-                          <span>{formatCurrency(fee.amount)}</span>
+                          <span className="text-ocean-200">{fee.name}</span>
+                          <span className="shrink-0">{formatCurrency(fee.amount)}</span>
                         </div>
                       ))}
                       <div className="border-t border-ocean-700 pt-2 flex justify-between items-center">
                         <span className="text-ocean-200">Total</span>
-                        <span className="text-3xl font-bold">{formatCurrency(store.getGrandTotal())}</span>
+                        <span className="text-2xl font-bold shrink-0">{formatCurrency(store.getGrandTotal())}</span>
                       </div>
                     </div>
                   </div>
@@ -669,11 +661,13 @@ function BookingForm() {
                       <ChevronLeft className="mr-2 h-4 w-4" />
                       Back
                     </Button>
-                    <Button variant="cta" onClick={() => store.nextStep()} disabled={store.adultCount + store.childCount === 0}>
+                    <Button variant="cta" onClick={() => store.nextStep()} disabled={store.totalGuests() === 0}>
                       Guest Details
                       <ChevronRight className="ml-2 h-4 w-4" />
                     </Button>
                   </div>
+                  </>
+                  )}
               </CardContent>
             </Card>
           )}
@@ -682,10 +676,18 @@ function BookingForm() {
           {store.currentStep === 4 && (
             <Card>
               <CardHeader>
-                <CardTitle className="text-xl sm:text-2xl">Guest Details</CardTitle>
-                <p className="text-ocean-500 text-sm">
-                  {store.totalGuests()} guest{store.totalGuests() !== 1 ? "s" : ""} — primary guest is required, others are optional
-                </p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-xl sm:text-2xl">Guest Details</CardTitle>
+                    <p className="text-ocean-500 text-sm">
+                      {store.totalGuests()} guest{store.totalGuests() !== 1 ? "s" : ""} — primary guest is required, others are optional
+                    </p>
+                  </div>
+                  <Button variant="ghost" size="sm" className="hidden max-sm:flex" onClick={() => store.prevStep()}>
+                    <ChevronLeft className="mr-1 h-4 w-4" />
+                    Back
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="space-y-6">
                 {/* Guest Pills */}
@@ -837,11 +839,11 @@ function BookingForm() {
                 })()}
 
                 <div className="flex justify-between pt-4">
-                  <Button variant="outline" onClick={() => store.prevStep()}>
+                  <Button variant="outline" className="hidden sm:flex" onClick={() => store.prevStep()}>
                     <ChevronLeft className="mr-2 h-4 w-4" />
                     Back
                   </Button>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-1 sm:flex-initial max-sm:justify-between">
                     <Button variant="outline" onClick={() => {
                       // Only validate guest 1
                       const errs: Record<string, string> = {};
@@ -935,27 +937,25 @@ function BookingForm() {
                         {store.selectedSlot!.boat_name}
                       </span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-ocean-500">Adults</span>
-                      <span>
-                        {store.adultCount} × {formatCurrency(200)}
-                      </span>
-                    </div>
-                    {store.childCount > 0 && (
-                      <div className="flex justify-between">
-                        <span className="text-ocean-500">Children</span>
-                        <span>
-                          {store.childCount} × {formatCurrency(150)}
-                        </span>
-                      </div>
-                    )}
+                    {store.ticketTypes.map((type) => {
+                      const count = store.ticketCounts[type.id] ?? 0;
+                      if (count === 0) return null;
+                      return (
+                        <div key={type.id} className="flex justify-between">
+                          <span className="text-ocean-500">{type.name}{count > 1 ? 's' : ''}</span>
+                          <span>
+                            {count} × {formatCurrency(type.price_cents / 100)}
+                          </span>
+                        </div>
+                      );
+                    })}
                     {store.packageUpgrade && (
                       <div className="flex justify-between">
                         <span className="text-ocean-500">
                           Photo Package
                         </span>
                         <span>
-                          {store.adultCount + store.childCount} ×{" "}
+                          {store.totalGuests()} ×{" "}
                           {formatCurrency(75)}
                         </span>
                       </div>
@@ -964,45 +964,51 @@ function BookingForm() {
                   <div className="border-t border-ocean-200 pt-3 space-y-2">
                     <div className="flex justify-between items-center">
                       <span className="font-semibold">Subtotal</span>
-                      <span className="font-medium">{formatCurrency(store.getSubtotal())}</span>
+                      <span className="font-medium shrink-0">{formatCurrency(store.getSubtotal())}</span>
                     </div>
                     {store.getFees().map((fee, i) => (
                       <div key={i} className="flex justify-between items-center text-sm">
-                        <span className="text-ocean-500">{fee.name} ({fee.type === 'flat' ? `$${(fee.flat_value ?? fee.value).toFixed(2)}` : fee.type === 'both' ? `${fee.value}% + $${(fee.flat_value ?? 0).toFixed(2)}` : `${fee.value}%`})</span>
-                        <span>{formatCurrency(fee.amount)}</span>
+                        <span className="text-ocean-500">{fee.name}</span>
+                        <span className="shrink-0">{formatCurrency(fee.amount)}</span>
                       </div>
                     ))}
                     <div className="border-t border-ocean-200 pt-2 flex justify-between items-center">
                       <span className="font-semibold text-lg">Total</span>
-                      <span className="text-2xl font-bold text-ocean-700">{formatCurrency(store.getGrandTotal())}</span>
+                      <span className="text-2xl font-bold text-ocean-700 shrink-0">{formatCurrency(store.getGrandTotal())}</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Guest Summary */}
-                <div className="bg-ocean-50 rounded-lg p-6 space-y-3 text-sm">
-                  <h3 className="font-semibold text-lg">Guests</h3>
-                  {store.guests.map((g, i) => (
-                    g.first_name && g.last_name ? (
-                    <div key={i} className="flex justify-between items-start">
-                      <div>
-                        <span className="font-medium">{g.first_name} {g.last_name}</span>
-                        {i === 0 && <span className="text-ocean-400 ml-2">(primary)</span>}
+                <div className="bg-ocean-50 rounded-lg p-6 text-sm">
+                  <h3 className="font-semibold text-lg mb-4">Guests</h3>
+                  <div className="space-y-3">
+                    {store.guests.map((g, i) => (
+                      g.first_name && g.last_name ? (
+                      <div key={i} className="bg-white rounded-lg p-3 border border-ocean-100">
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-ocean-900">{g.first_name} {g.last_name}</span>
+                          {i === 0 && (
+                            <span className="text-[10px] font-medium uppercase tracking-wide text-ocean-500 bg-ocean-100 px-2 py-0.5 rounded-full">Primary</span>
+                          )}
+                        </div>
+                        {g.email && (
+                          <span className="block text-ocean-400 text-xs mt-1 truncate">{g.email}</span>
+                        )}
                       </div>
-                      <span className="text-ocean-500">{g.email}</span>
-                    </div>
-                    ) : null
-                  ))}
+                      ) : null
+                    ))}
+                  </div>
                   {store.missingGuestCount() > 0 && (
-                    <p className="text-amber-600 text-xs mt-2">
+                    <p className="text-amber-600 text-xs mt-3">
                       ⚠ {store.missingGuestCount()} guest detail{store.missingGuestCount() !== 1 ? "s" : ""} to be collected later
                     </p>
                   )}
                   {store.guests[0]?.phone && (
-                    <p className="text-ocean-500">Phone: {store.guests[0].phone}</p>
+                    <p className="text-ocean-500 text-xs mt-3">Phone: {store.guests[0].phone}</p>
                   )}
                   {store.specialOccasion && (
-                    <p className="text-ocean-600 italic">
+                    <p className="text-ocean-600 italic text-xs mt-3">
                       🎉 Special occasion: {store.specialComment || "Not specified"}
                     </p>
                   )}
