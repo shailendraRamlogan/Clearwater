@@ -1,23 +1,17 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
-use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
 
+// Columns now included in 2026_04_22_000001_create_base_tables.php
 return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('bookings', function (Blueprint $table) {
-            $table->boolean('is_confirmed')->default(false)->after('status');
-            $table->boolean('needs_confirmation')->default(false)->after('is_confirmed');
-        });
+        // No-op: is_confirmed and needs_confirmation already in base table
     }
 
     public function down(): void
     {
-        Schema::table('bookings', function (Blueprint $table) {
-            $table->dropColumn(['is_confirmed', 'needs_confirmation']);
-        });
+        // No-op
     }
 };
