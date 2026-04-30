@@ -201,39 +201,29 @@ class PrivateTourRequestResource extends Resource
                                     'is_primary' => true,
                                 ]];
                             }
-                            return null; // Use existing guest data
+                            return null;
                         })
-                        ->schema(function ($get, $livewire) {
-                            $schema = [
-                                Forms\Components\Grid::make(2)
-                                    ->schema([
-                                        Forms\Components\TextInput::make('first_name')
-                                            ->required()
-                                            ->maxLength(100),
-                                        Forms\Components\TextInput::make('last_name')
-                                            ->required()
-                                            ->maxLength(100),
-                                    ]),
-                            ];
-
-                            // First item (primary) gets email + phone row
-                            // Use a hidden field to detect primary
-                            $schema[] = Forms\Components\Toggle::make('is_primary')
-                                ->label('Primary Contact')
-                                ->default(false)
-                                ->hidden(); // Hidden but tracks state
-
-                            $schema[] = Forms\Components\TextInput::make('email')
-                                ->email()
-                                ->maxLength(255);
-
-                            $schema[] = Forms\Components\TextInput::make('phone')
-                                ->maxLength(30)
-                                ->visible(fn ($get) => $get('is_primary'))
-                                ->label('Phone (primary only)');
-
-                            return $schema;
-                        })
+                        ->schema([
+                            Forms\Components\Grid::make(2)
+                                ->schema([
+                                    Forms\Components\TextInput::make('first_name')
+                                        ->required()
+                                        ->maxLength(100),
+                                    Forms\Components\TextInput::make('last_name')
+                                        ->required()
+                                        ->maxLength(100),
+                                ]),
+                            Forms\Components\Grid::make(2)
+                                ->schema([
+                                    Forms\Components\TextInput::make('email')
+                                        ->email()
+                                        ->maxLength(255),
+                                    Forms\Components\TextInput::make('phone')
+                                        ->maxLength(30)
+                                        ->label('Phone'),
+                                ]),
+                            Forms\Components\Hidden::make('is_primary'),
+                        ])
                         ->addActionLabel('Add Guest')
                         ->disabled(fn ($record) => !in_array($record?->status, [PrivateTourRequest::STATUS_REQUESTED]))
                         ->reorderable(false)
@@ -288,7 +278,7 @@ class PrivateTourRequestResource extends Resource
     private static function getGuestBadgeHtml(PrivateTourRequest $record): string
     {
         $guests = $record->guests;
-        $total = $record->totalGuests();
+        $total = $record->adult_count + $record->child_count + $record->infant_count;
         $completed = $guests->filter(fn ($g) => !empty($g->first_name) && !empty($g->last_name))->count();
 
         $color = $completed >= $total ? '#d1fae5; color:#065f46'
@@ -412,15 +402,12 @@ class PrivateTourRequestResource extends Resource
                                         Forms\Components\TextInput::make('first_name')->required()->maxLength(100),
                                         Forms\Components\TextInput::make('last_name')->required()->maxLength(100),
                                     ]),
-                                Forms\Components\TextInput::make('email')->email()->maxLength(255),
-                                Forms\Components\TextInput::make('phone')
-                                    ->maxLength(30)
-                                    ->visible(fn ($get) => $get('is_primary'))
-                                    ->label('Phone (primary only)'),
-                                Forms\Components\Toggle::make('is_primary')
-                                    ->label('Primary Contact')
-                                    ->default(false)
-                                    ->hidden(),
+                                Forms\Components\Grid::make(2)
+                                    ->schema([
+                                        Forms\Components\TextInput::make('email')->email()->maxLength(255),
+                                        Forms\Components\TextInput::make('phone')->maxLength(30)->label('Phone'),
+                                    ]),
+                                Forms\Components\Hidden::make('is_primary'),
                             ])
                             ->columnSpanFull()
                             ->addActionLabel('Add Guest')
