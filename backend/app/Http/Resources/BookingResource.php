@@ -13,7 +13,7 @@ class BookingResource extends JsonResource
 
         return [
             'id' => $this->booking_ref ?? $this->id,
-            'tour_date' => $this->tour_date?->format('Y-m-d'),
+            'tour_date' => \Illuminate\Support\Carbon::parse($this->tour_date)->format('Y-m-d'),
             'time_slot' => new TimeSlotResource($this->whenLoaded('timeSlot')),
             'guest' => $primaryGuest ? [
                 'first_name' => $primaryGuest->first_name,

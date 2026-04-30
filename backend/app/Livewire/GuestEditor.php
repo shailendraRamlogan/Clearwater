@@ -4,6 +4,7 @@ namespace App\Livewire;
 
 use App\Models\Booking;
 use App\Models\BookingGuest;
+use App\Services\EmailService;
 use Illuminate\Support\Str;
 use Livewire\Component;
 
@@ -90,15 +91,40 @@ class GuestEditor extends Component
             $this->guestIds[$i] = $guest->id;
         }
 
-        // Auto-complete when all guests collected
-        $totalGuests = $booking->items()->sum('quantity');
-        $collectedGuests = $booking->guests()->count();
-        if ($collectedGuests >= $totalGuests) {
+        // Check if all guest slots are now complete
+        $totalExpected = $booking->items()->sum('quantity');
+        $booking->load('guests');
+        $completeGuests = $booking->guests()
+            ->whereNotNull('first_name')
+            ->where('first_name', '!=', '')
+            ->whereNotNull('last_name')
+            ->where('last_name', '!=', '')
+            ->whereNotNull('email')
+            ->where('email', '!=', '')
+            ->count();
+
+        if ($completeGuests >= $totalExpected) {
             $booking->update([
                 'is_confirmed' => true,
                 'needs_confirmation' => false,
-                'status' => 'confirmed',
+                'status' => $booking->status === 'pending' ? 'confirmed' : $booking->status,
             ]);
+
+            // Send the guests-completed email
+            try {
+                $booking->load('primaryGuest', 'timeSlot.boat', 'items', 'addons.addon');
+                app(EmailService::class)->sendGuestsCompletedEmail($booking);
+                \Filament\Notifications\Notification::make()
+                    ->title('Completion email sent to ' . $booking->primaryGuest?->email)
+                    ->success()
+                    ->send();
+            } catch (\Exception $e) {
+                \Filament\Notifications\Notification::make()
+                    ->title('Failed to send completion email')
+                    ->body($e->getMessage())
+                    ->danger()
+                    ->send();
+            }
         }
 
         $this->js("window.Filament && Filament.notify({ type: 'success', message: 'Guest " . ($i + 1) . " saved.' });");

@@ -12,6 +12,12 @@ use Filament\Tables\Table;
 
 class BookingFeeResource extends Resource
 {
+        public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+        return $user && in_array($user->role, ['admin', 'super_admin']);
+    }
+
     protected static ?string $model = BookingFee::class;
     protected static ?string $navigationIcon = 'heroicon-o-receipt-percent';
     protected static ?string $navigationGroup = 'Settings';

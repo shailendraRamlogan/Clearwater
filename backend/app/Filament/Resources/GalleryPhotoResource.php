@@ -12,6 +12,12 @@ use Filament\Tables\Table;
 
 class GalleryPhotoResource extends Resource
 {
+        public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+        return $user && in_array($user->role, ['admin', 'super_admin']);
+    }
+
     protected static ?string $model = GalleryPhoto::class;
     protected static ?string $navigationIcon = 'heroicon-o-photo';
     protected static ?int $navigationSort = 50;
@@ -52,7 +58,7 @@ class GalleryPhotoResource extends Resource
         return $table
             ->defaultSort('sort_order', 'asc')
             ->columns([
-                Tables\Columns\ImageColumn::make('thumbnail')
+                Tables\Columns\ImageColumn::make('thumbnail')->disk('public')
                     ->label('Preview')
                     ->getStateUsing(fn (GalleryPhoto $record): ?string => $record->src),
                 Tables\Columns\TextColumn::make('alt_text')

@@ -15,6 +15,12 @@ class PaymentResource extends Resource
     protected static ?string $navigationIcon = 'heroicon-o-credit-card';
     protected static ?int $navigationSort = 50;
 
+    public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+        return $user && in_array($user->role, ['admin', 'super_admin']);
+    }
+
     public static function canCreate(): bool
     {
         return false;
@@ -69,7 +75,17 @@ class PaymentResource extends Resource
                     ->label('Date'),
             ])
             ->filters([
-                Tables\Filters\SelectFilter::make('status')
+                Tables\Filters\Filter::make("created_at_range")
+                    ->label("Created Date")
+                    ->form([
+                        \Filament\Forms\Components\DatePicker::make("from")->label("From")->closeOnDateSelection(),
+                        \Filament\Forms\Components\DatePicker::make("until")->label("Until")->closeOnDateSelection(),
+                    ])
+                    ->query(function ($query, array $data): void {
+                        $query->when($data["from"], fn ($q, $v) => $q->whereDate("created_at", ">=", $v))
+                            ->when($data["until"], fn ($q, $v) => $q->whereDate("created_at", "<=", $v));
+                    }),
+                                Tables\Filters\SelectFilter::make('status')
                     ->options([
                         'pending' => 'Pending',
                         'succeeded' => 'Succeeded',

@@ -15,16 +15,16 @@ import {
   Ship,
   Minus,
   Plus,
-  PartyPopper,
-} from "lucide-react";
-import {
-  Camera, Citrus, Beer, Grape, Wine, Cookie, GlassWater,
-  // fallback icons for unknown feature icons
   Sparkles,
+  Camera, Citrus, Beer, Grape, Wine, Cookie, GlassWater, PartyPopper,
 } from "lucide-react";
 
 const FEATURE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   Camera, Citrus, Beer, Grape, Wine, Cookie, Juice: GlassWater,
+};
+
+const ADDON_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  Camera, Citrus, Beer, Grape, Wine, Cookie, GlassWater, PartyPopper, Sparkles,
 };
 import { loadStripe } from "@stripe/stripe-js";
 import { CardElement, Elements, useStripe, useElements } from "@stripe/react-stripe-js";
@@ -33,11 +33,10 @@ import "react-phone-input-2/lib/style.css";
 import PhoneInput from "react-phone-input-2";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useBookingStore } from "@/stores/booking-store";
 import { ModernCalendar } from "@/components/ui/calendar";
-import { getAvailability, createBooking, getPricing, confirmPayment, getTicketTypes } from "@/lib/booking-service";
+import { getAvailability, createBooking, getPricing, confirmPayment, getTicketTypes, getAddons } from "@/lib/booking-service";
 // import api from "@/lib/api";
 import { formatCurrency, formatTime } from "@/lib/utils";
 import { toast } from "sonner";
@@ -50,6 +49,7 @@ const stepIcons = [
   Clock,
   Users,
   User,
+  Sparkles,
   CreditCard,
 ];
 
@@ -58,6 +58,7 @@ const stepLabels = [
   "Time",
   "Tickets",
   "Details",
+  "Add-ons",
   "Pay",
 ];
 
@@ -78,6 +79,7 @@ function BookingForm() {
   const [ticketTypesLoaded, setTicketTypesLoaded] = useState(false);
   const [activeGuest, setActiveGuest] = useState(0);
   const [confirmEmail, setConfirmEmail] = useState("");
+  const [occasionText, setOccasionText] = useState("");
   const lastFetchedDate = useRef<string | null>(null);
 
   // Fetch pricing fees and ticket types on mount
@@ -89,6 +91,9 @@ function BookingForm() {
       if (types.length > 0) store.setTicketTypes(types);
       setTicketTypesLoaded(true);
     }).catch(() => { setTicketTypesLoaded(true); });
+    getAddons().then((addons) => {
+      if (addons.length > 0) store.setAddons(addons);
+    }).catch(() => {});
   }, []);
 
   // Auto-collapse when count drops to 0
@@ -158,14 +163,17 @@ function BookingForm() {
     setLoading(true);
     setStripeError("");
     try {
+      const addonsPayload = Object.entries(store.selectedAddons)
+        .filter((entry) => entry[1] > 0)
+        .map(([addonId, qty]) => ({ addon_id: addonId, quantity: qty }));
+
       const booking = await createBooking({
         tour_date: format(store.selectedDate, "yyyy-MM-dd"),
         time_slot_id: store.selectedSlot.id,
         adult_count: store.ticketCounts[store.ticketTypes.find(t => t.name.toLowerCase() === 'adult')?.id ?? ''] ?? 0,
         child_count: store.ticketCounts[store.ticketTypes.find(t => t.name.toLowerCase() === 'child')?.id ?? ''] ?? 0,
-        package_upgrade: store.packageUpgrade,
-        special_occasion: store.specialOccasion,
-        special_comment: store.specialComment,
+        addons: addonsPayload,
+        special_comment: "",
         guest: store.guests[0],
         guests: store.guests.slice(1).filter((g) => g.first_name || g.last_name || g.email || g.phone),
       });
@@ -348,7 +356,7 @@ function BookingForm() {
         <div className="max-w-2xl mx-auto h-1 bg-ocean-100 rounded-full overflow-hidden">
           <div
             className="h-full bg-ocean-700 rounded-full transition-all duration-300"
-            style={{ width: `${((store.currentStep - 1) / 4) * 100}%` }}
+            style={{ width: `${((store.currentStep - 1) / 5) * 100}%` }}
           />
         </div>
       </div>
@@ -582,57 +590,6 @@ function BookingForm() {
                     );
                   })}
 
-                  {/* Package Upgrade */}
-                  <div className="flex items-center justify-between p-4 border border-ocean-100 rounded-lg">
-                    <div>
-                      <p className="font-semibold flex items-center gap-2">
-                        <PartyPopper className="h-4 w-4 text-ocean-500" />
-                        Photo Package Upgrade
-                      </p>
-                      <p className="text-sm text-ocean-500">
-                        +{formatCurrency(75)} per person — All edited digital
-                        photos + printed copies
-                      </p>
-                    </div>
-                    <Switch
-                      checked={store.packageUpgrade}
-                      onCheckedChange={store.setPackageUpgrade}
-                    />
-                  </div>
-
-                  {/* Special Occasion */}
-                  <div className="flex items-center justify-between p-4 border border-ocean-100 rounded-lg">
-                    <div>
-                      <p className="font-semibold flex items-center gap-2">
-                        🎉 Special Occasion
-                      </p>
-                      <p className="text-sm text-ocean-500">
-                        Birthday, anniversary, proposal? Let us know!
-                      </p>
-                    </div>
-                    <Switch
-                      checked={store.specialOccasion}
-                      onCheckedChange={store.setSpecialOccasion}
-                    />
-                  </div>
-
-                  {store.specialOccasion && (
-                    <div>
-                      <Label htmlFor="specialComment">
-                        Tell us about the occasion
-                      </Label>
-                      <textarea
-                        id="specialComment"
-                        className="mt-1 flex w-full rounded-lg border border-ocean-200 bg-white px-4 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ocean-700 min-h-[80px]"
-                        placeholder="e.g., It's Sarah's 30th birthday! Can we have a cake on the boat?"
-                        value={store.specialComment}
-                        onChange={(e) =>
-                          store.setSpecialComment(e.target.value)
-                        }
-                      />
-                    </div>
-                  )}
-
                   {/* Running Total */}
                   <div className="bg-ocean-900 text-white rounded-lg p-6">
                     <div className="space-y-2">
@@ -844,30 +801,6 @@ function BookingForm() {
                     Back
                   </Button>
                   <div className="flex gap-2 flex-1 sm:flex-initial max-sm:justify-between">
-                    <Button variant="outline" onClick={() => {
-                      // Only validate guest 1
-                      const errs: Record<string, string> = {};
-                      const p = store.guests[0];
-                      if (!p.first_name.trim()) errs.first_name = "Required";
-                      if (!p.last_name.trim()) errs.last_name = "Required";
-                      if (!p.email.trim()) errs.email = "Required";
-                      if (!confirmEmail.trim()) errs.confirmEmail = "Required";
-                      if (!p.phone.trim()) errs.phone = "Required";
-                      if (p.email && confirmEmail && p.email !== confirmEmail) errs.confirmEmail = "Emails do not match";
-                      const digits = p.phone.replace(/\D/g, "");
-                      if (digits.length < 7) errs.phone = "At least 7 digits required";
-
-                      if (Object.keys(errs).length > 0) {
-                        setActiveGuest(0);
-                        setConfirmEmail(store.guests[0].email);
-                        setErrors(errs);
-                        return;
-                      }
-                      setErrors({});
-                      store.nextStep();
-                    }}>
-                      Continue to Review
-                    </Button>
                     <Button variant="cta" onClick={() => {
                       // Validate all guests
                       const errs: Record<string, string> = {};
@@ -901,7 +834,7 @@ function BookingForm() {
                       setErrors({});
                       store.nextStep();
                     }}>
-                      Review & Pay
+                      Add-ons
                       <ChevronRight className="ml-2 h-4 w-4" />
                     </Button>
                   </div>
@@ -910,8 +843,133 @@ function BookingForm() {
             </Card>
           )}
 
-          {/* Step 5: Review & Pay */}
+          
+          {/* Step 5: Add-ons */}
           {store.currentStep === 5 && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-xl sm:text-2xl">Enhance Your Experience</CardTitle>
+                    <p className="text-ocean-500 text-sm">
+                      Optional add-ons for your tour
+                    </p>
+                  </div>
+                  <Button variant="ghost" size="sm" className="hidden max-sm:flex" onClick={() => store.prevStep()}>
+                    <ChevronLeft className="mr-1 h-4 w-4" />
+                    Back
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {store.addons.length === 0 ? (
+                  <div className="text-center py-8 text-ocean-400">
+                    <p>No add-ons available at this time.</p>
+                  </div>
+                ) : (
+                  store.addons.map((addon) => {
+                    const qty = store.selectedAddons[addon.id] ?? 0;
+                    const maxQty = addon.max_quantity ?? 99;
+                    const IconComp = addon.icon_name && ADDON_ICONS[addon.icon_name] ? ADDON_ICONS[addon.icon_name] : Sparkles;
+                    const isSpecialOccasion = addon.title.toLowerCase().includes("special occasion");
+
+                    return (
+                      <div
+                        key={addon.id}
+                        className={`border rounded-lg p-4 transition-colors ${
+                          qty > 0
+                            ? "border-ocean-700 bg-ocean-50"
+                            : "border-ocean-100 hover:border-ocean-200"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <IconComp className="h-4 w-4 text-ocean-500 shrink-0" />
+                              <p className="font-semibold">{addon.title}</p>
+                            </div>
+                            {addon.description && (
+                              <p className="text-sm text-ocean-500 mb-2">{addon.description}</p>
+                            )}
+                            <p className="text-sm font-medium text-ocean-700">
+                              {addon.price_cents > 0
+                                ? formatCurrency(addon.price_cents / 100) + " per person"
+                                : "Free"}
+                            </p>
+                            {isSpecialOccasion && qty > 0 && (
+                              <div className="mt-3">
+                                <Label htmlFor="specialComment" className="text-sm">
+                                  Tell us about the occasion
+                                </Label>
+                                <textarea
+                                  id="specialComment"
+                                  className="mt-1 flex w-full rounded-lg border border-ocean-200 bg-white px-4 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ocean-700 min-h-[80px]"
+                                  placeholder="e.g., It's Sarah's 30th birthday! Can we have a cake on the boat?"
+                                  value={occasionText}
+                                  onChange={(e) => setOccasionText(e.target.value)}
+                                />
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              className="w-8 h-8 rounded-full border border-ocean-200 flex items-center justify-center hover:bg-ocean-100 transition-colors disabled:opacity-30"
+                              onClick={() => store.setAddonQuantity(addon.id, Math.max(0, qty - 1))}
+                              disabled={qty === 0}
+                            >
+                              <Minus className="h-3 w-3" />
+                            </button>
+                            <span className="w-8 text-center font-semibold">{qty}</span>
+                            <button
+                              className="w-8 h-8 rounded-full border border-ocean-200 flex items-center justify-center hover:bg-ocean-100 transition-colors disabled:opacity-30"
+                              onClick={() => store.setAddonQuantity(addon.id, Math.min(maxQty, qty + 1))}
+                              disabled={qty >= maxQty}
+                            >
+                              <Plus className="h-3 w-3" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+
+                {/* Running Total */}
+                <div className="bg-ocean-900 text-white rounded-lg p-6">
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-ocean-200">Subtotal</span>
+                      <span className="shrink-0">{formatCurrency(store.getSubtotal())}</span>
+                    </div>
+                    {store.getFees().map((fee, i) => (
+                      <div key={i} className="flex justify-between items-center">
+                        <span className="text-ocean-200">{fee.name}</span>
+                        <span className="shrink-0">{formatCurrency(fee.amount)}</span>
+                      </div>
+                    ))}
+                    <div className="border-t border-ocean-700 pt-2 flex justify-between items-center">
+                      <span className="text-ocean-200">Total</span>
+                      <span className="text-2xl font-bold shrink-0">{formatCurrency(store.getGrandTotal())}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-between">
+                  <Button variant="outline" onClick={() => store.prevStep()}>
+                    <ChevronLeft className="mr-2 h-4 w-4" />
+                    Back
+                  </Button>
+                  <Button variant="cta" onClick={() => store.nextStep()}>
+                    Review & Pay
+                    <ChevronRight className="ml-2 h-4 w-4" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+{/* Step 6: Review & Pay */}
+          {store.currentStep === 6 && (
             <Card>
               <CardHeader>
                 <CardTitle className="text-xl sm:text-2xl">Review & Pay</CardTitle>
@@ -949,17 +1007,15 @@ function BookingForm() {
                         </div>
                       );
                     })}
-                    {store.packageUpgrade && (
-                      <div className="flex justify-between">
-                        <span className="text-ocean-500">
-                          Photo Package
-                        </span>
-                        <span>
-                          {store.totalGuests()} ×{" "}
-                          {formatCurrency(75)}
-                        </span>
-                      </div>
-                    )}
+                    {store.addons.filter(a => (store.selectedAddons[a.id] ?? 0) > 0).map((addon) => {
+                      const qty = store.selectedAddons[addon.id] ?? 0;
+                      return (
+                        <div key={addon.id} className="flex justify-between">
+                          <span className="text-ocean-500">{addon.title}</span>
+                          <span>{qty} × {formatCurrency(addon.price_cents / 100)}</span>
+                        </div>
+                      );
+                    })}
                   </div>
                   <div className="border-t border-ocean-200 pt-3 space-y-2">
                     <div className="flex justify-between items-center">
@@ -1007,11 +1063,7 @@ function BookingForm() {
                   {store.guests[0]?.phone && (
                     <p className="text-ocean-500 text-xs mt-3">Phone: {store.guests[0].phone}</p>
                   )}
-                  {store.specialOccasion && (
-                    <p className="text-ocean-600 italic text-xs mt-3">
-                      🎉 Special occasion: {store.specialComment || "Not specified"}
-                    </p>
-                  )}
+                  
                 </div>
 
                 {/* Payment section */}

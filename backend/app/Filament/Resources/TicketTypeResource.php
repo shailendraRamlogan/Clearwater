@@ -10,10 +10,15 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Tables\Filters\TernaryFilter;
-use App\Models\TicketTypeFeature;
 
 class TicketTypeResource extends Resource
 {
+    public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+        return $user && in_array($user->role, ['admin', 'super_admin']);
+    }
+
     protected static ?string $model = TicketType::class;
     protected static ?string $navigationIcon = 'heroicon-o-ticket';
     protected static ?string $navigationGroup = 'Settings';
@@ -23,26 +28,33 @@ class TicketTypeResource extends Resource
     {
         return $form
             ->schema([
-                Forms\Components\TextInput::make('name')
-                    ->required()
-                    ->maxLength(255),
-                Forms\Components\Textarea::make('description')
-                    ->rows(3)
-                    ->columnSpanFull(),
-                Forms\Components\TextInput::make('price_cents')
-                    ->label('Price ($)')
-                    ->required()
-                    ->numeric()
-                    ->prefix('$')
-                    ->suffix('cents')
-                    ->minValue(0)
-                    ->helperText('Enter price in cents (e.g. 20000 for $200.00)'),
-                Forms\Components\Toggle::make('is_active')
-                    ->label('Active')
-                    ->default(true),
-                Forms\Components\TextInput::make('sort_order')
-                    ->numeric()
-                    ->default(0),
+                Forms\Components\Section::make('Ticket Details')
+                    ->schema([
+                        Forms\Components\Grid::make(3)
+                            ->schema([
+                                Forms\Components\TextInput::make('name')
+                                    ->required()
+                                    ->maxLength(255)
+                                    ->columnSpan(2),
+                                Forms\Components\TextInput::make('price_cents')
+                                    ->label('Price')
+                                    ->required()
+                                    ->numeric()
+                                    ->prefix('$')
+                                    ->minValue(0)
+                                    ->live()
+                                    ->dehydrateStateUsing(fn ($state) => (int) round(($state ?? 0) * 100))
+                                    ->formatStateUsing(fn ($state) => $state ? round($state / 100, 2) : null),
+                                Forms\Components\Textarea::make('description')
+                                    ->rows(2)
+                                    ->maxLength(500)
+                                    ->columnSpan(2),
+                                Forms\Components\Toggle::make('is_active')
+                                    ->label('Active')
+                                    ->default(true),
+                            ]),
+                    ])
+                    ->columns(3),
                 Forms\Components\Section::make('Features')
                     ->description('What\'s included with this ticket type')
                     ->collapsible()
@@ -83,12 +95,10 @@ class TicketTypeResource extends Resource
                     ->searchable(),
                 Tables\Columns\TextColumn::make('price_cents')
                     ->label('Price')
-                    ->money('USD')
                     ->formatStateUsing(fn ($state) => '$' . number_format($state / 100, 2)),
                 Tables\Columns\IconColumn::make('is_active')
                     ->label('Active')
                     ->boolean(),
-                Tables\Columns\TextColumn::make('sort_order'),
             ])
             ->filters([
                 TernaryFilter::make('is_active')
@@ -102,8 +112,7 @@ class TicketTypeResource extends Resource
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make(),
                 ]),
-            ])
-            ->defaultSort('sort_order');
+            ]);
     }
 
     public static function getPages(): array

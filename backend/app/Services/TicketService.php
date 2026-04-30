@@ -5,7 +5,9 @@ namespace App\Services;
 use App\Models\Booking;
 use Barryvdh\DomPDF\Facade\Pdf;
 use chillerlan\QRCode\QRCode;
-use chillerlan\QRCode\QROptions;class TicketService
+use chillerlan\QRCode\QROptions;
+
+class TicketService
 {
     public function generateQrBase64(string $data): string
     {
@@ -26,7 +28,14 @@ use chillerlan\QRCode\QROptions;class TicketService
 
     public function getAllGuestsComplete(Booking $booking): bool
     {
-        $booking->loadMissing('guests');
+        $booking->loadMissing(['guests', 'items']);
+        $expected = $booking->items->sum('quantity');
+        $actual = $booking->guests->count();
+
+        if ($actual < $expected) {
+            return false;
+        }
+
         return $booking->guests->every(function ($guest) {
             return $guest->first_name !== '' && $guest->last_name !== '' && $guest->email !== '';
         });

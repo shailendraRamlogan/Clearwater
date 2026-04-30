@@ -4,8 +4,9 @@ import type {
   BookingGuest,
   BookingItem,
   TicketType,
+  Addon,
 } from "@/types/booking";
-import { getTicketTypes } from "@/lib/booking-service";
+import { getTicketTypes, getAddons } from "@/lib/booking-service";
 
 interface BookingState {
   // Step 1: Date
@@ -23,12 +24,6 @@ interface BookingState {
   setTicketTypes: (types: TicketType[]) => void;
   ticketCounts: Record<string, number>;
   setTicketCount: (typeId: string, count: number) => void;
-  packageUpgrade: boolean;
-  setPackageUpgrade: (upgrade: boolean) => void;
-  specialOccasion: boolean;
-  setSpecialOccasion: (occasion: boolean) => void;
-  specialComment: string;
-  setSpecialComment: (comment: string) => void;
 
   // Backward-compatible getters
   adultCount: number;
@@ -41,6 +36,12 @@ interface BookingState {
   setGuestField: (index: number, field: keyof BookingGuest, value: string) => void;
   addGuest: () => void;
   removeGuest: (index: number) => void;
+
+  // Step 5: Add-ons
+  addons: Addon[];
+  setAddons: (addons: Addon[]) => void;
+  selectedAddons: Record<string, number>;
+  setAddonQuantity: (addonId: string, quantity: number) => void;
 
   // Navigation
   currentStep: number;
@@ -58,6 +59,7 @@ interface BookingState {
   getFees: () => { name: string; type: string; value: number; flat_value?: number; amount: number }[];
   getGrandTotal: () => number;
   getItems: () => BookingItem[];
+  getAddonsTotal: () => number;
   totalGuests: () => number;
   missingGuestCount: () => number;
   getTicketPrice: (typeId: string) => number;
@@ -68,8 +70,6 @@ interface BookingState {
   // Reset
   reset: () => void;
 }
-
-const UPGRADE_PRICE = 75;
 
 const emptyGuest = (): BookingGuest => ({
   first_name: "",
@@ -85,11 +85,10 @@ const initialState = {
   pricingFees: [],
   ticketTypes: [] as TicketType[],
   ticketCounts: {} as Record<string, number>,
-  packageUpgrade: false,
-  specialOccasion: false,
-  specialComment: "",
   guests: [emptyGuest()],
   currentStep: 1,
+  addons: [] as Addon[],
+  selectedAddons: {} as Record<string, number>,
 };
 
 // Helper: find ticket type by name (case-insensitive)
@@ -109,9 +108,6 @@ export const useBookingStore = create<BookingState>((set, get) => ({
     set((state) => ({
       ticketCounts: { ...state.ticketCounts, [typeId]: Math.max(0, count) },
     })),
-  setPackageUpgrade: (upgrade) => set({ packageUpgrade: upgrade }),
-  setSpecialOccasion: (occasion) => set({ specialOccasion: occasion }),
-  setSpecialComment: (comment) => set({ specialComment: comment }),
 
   // Backward-compatible getters/setters
   get adultCount() {
@@ -144,16 +140,29 @@ export const useBookingStore = create<BookingState>((set, get) => ({
     guests: state.guests.filter((_, i) => i !== index),
   })),
 
+  // Add-ons
+  setAddons: (addons) => set({ addons }),
+  setAddonQuantity: (addonId, quantity) =>
+    set((state) => ({
+      selectedAddons: { ...state.selectedAddons, [addonId]: Math.max(0, quantity) },
+    })),
+
   setCurrentStep: (step) => set({ currentStep: step }),
-  nextStep: () => set((state) => ({ currentStep: Math.min(5, state.currentStep + 1) })),
+  nextStep: () => set((state) => ({ currentStep: Math.min(6, state.currentStep + 1) })),
   prevStep: () => set((state) => ({ currentStep: Math.max(1, state.currentStep - 1) })),
 
   init: () => {
-    // Fetch ticket types on init
     getTicketTypes()
       .then((types) => {
         if (types.length > 0) {
           set({ ticketTypes: types });
+        }
+      })
+      .catch(() => {});
+    getAddons()
+      .then((addons) => {
+        if (addons.length > 0) {
+          set({ addons });
         }
       })
       .catch(() => {});
@@ -175,9 +184,19 @@ export const useBookingStore = create<BookingState>((set, get) => ({
       const count = state.ticketCounts[type.id] ?? 0;
       ticketTotal += count * (type.price_cents / 100);
     }
-    const totalTickets = Object.values(state.ticketCounts).reduce((s, c) => s + c, 0);
-    const upgradeTotal = state.packageUpgrade ? totalTickets * UPGRADE_PRICE : 0;
-    return ticketTotal + upgradeTotal;
+    return ticketTotal + state.getAddonsTotal();
+  },
+
+  getAddonsTotal: () => {
+    const state = get();
+    let total = 0;
+    for (const addon of state.addons) {
+      const qty = state.selectedAddons[addon.id] ?? 0;
+      if (qty > 0) {
+        total += qty * addon.price_dollars;
+      }
+    }
+    return total;
   },
 
   getFees: () => {
@@ -186,9 +205,9 @@ export const useBookingStore = create<BookingState>((set, get) => ({
     if (!fees || fees.length === 0) return [];
     return fees.map((f) => {
       let amount = 0;
-      if (f.type === 'flat') {
+      if (f.type === "flat") {
         amount = f.flat_value ?? f.value;
-      } else if (f.type === 'both') {
+      } else if (f.type === "both") {
         amount = Math.round(subtotal * f.value / 100 * 100) / 100 + (f.flat_value ?? 0);
       } else {
         amount = Math.round(subtotal * f.value / 100 * 100) / 100;
@@ -214,16 +233,6 @@ export const useBookingStore = create<BookingState>((set, get) => ({
           ticket_type: type.name.toLowerCase() as "adult" | "child",
           quantity: count,
           unit_price: type.price_cents / 100,
-        });
-      }
-    }
-    if (state.packageUpgrade) {
-      const totalTickets = Object.values(state.ticketCounts).reduce((s, c) => s + c, 0);
-      if (totalTickets > 0) {
-        items.push({
-          ticket_type: "adult" as const,
-          quantity: totalTickets,
-          unit_price: UPGRADE_PRICE,
         });
       }
     }

@@ -13,6 +13,11 @@ class ConfirmationRequiredWidget extends BaseWidget
     protected static ?int $sort = 21;
     protected int | string | array $columnSpan = 'full';
 
+    public static function isDiscovered(): bool
+    {
+        return false;
+    }
+
     public function table(Table $table): Table
     {
         return $table

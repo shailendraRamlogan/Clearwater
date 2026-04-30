@@ -213,8 +213,8 @@ export default function AdminDashboard() {
                     <p className="font-bold text-lg">
                       {formatCurrency(booking.total_price)}
                     </p>
-                    {booking.special_occasion && (
-                      <p className="text-xs text-ocean-400">🎉 Special</p>
+                    {booking.addons && booking.addons.length > 0 && (
+                      <p className="text-xs text-ocean-400">⭐ {booking.addons.map(a => a.title).join(", ")}</p>
                     )}
                   </div>
                 </div>

@@ -12,6 +12,12 @@ use Filament\Tables\Table;
 
 class BookingResource extends Resource
 {
+        public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+        return $user && in_array($user->role, ['admin', 'super_admin']);
+    }
+
     protected static ?string $model = Booking::class;
     protected static ?string $navigationIcon = 'heroicon-o-calendar-days';
     protected static ?int $navigationSort = 30;
@@ -144,13 +150,16 @@ class BookingResource extends Resource
                     ->formatStateUsing(fn ($record) => '$' . number_format(($record->total_price_cents ?? 0) / 100, 2)),
             ])
             ->filters([
-                Tables\Filters\SelectFilter::make('status')
-                    ->options([
-                        'pending' => 'Pending',
-                        'confirmed' => 'Confirmed',
-                        'cancelled' => 'Cancelled',
-                        'completed' => 'Completed',
-                    ]),
+                Tables\Filters\Filter::make("tour_date_range")
+                    ->label("Tour Date")
+                    ->form([
+                        \Filament\Forms\Components\DatePicker::make("from")->label("From")->closeOnDateSelection(),
+                        \Filament\Forms\Components\DatePicker::make("until")->label("Until")->closeOnDateSelection(),
+                    ])
+                    ->query(function ($query, array $data): void {
+                        $query->when($data["from"], fn ($q, $v) => $q->whereDate("tour_date", ">=", $v))
+                            ->when($data["until"], fn ($q, $v) => $q->whereDate("tour_date", "<=", $v));
+                    }),
             ])
             ->actions([
                 Tables\Actions\Action::make('view')

@@ -15,40 +15,42 @@ class EmailService
 
     public function sendConfirmation(Booking $booking): void
     {
-        $booking->loadMissing(['primaryGuest', 'timeSlot.boat', 'items']);
+        $booking->loadMissing(['primaryGuest', 'timeSlot.boat', 'items', 'addons.addon']);
         $guest = $booking->primaryGuest;
 
-        if (!$guest || !config('services.resend.api_key')) {
+        if (!$guest || !config('services.resend.key')) {
             return;
         }
 
+        $allComplete = $this->ticketService->getAllGuestsComplete($booking);
+
         try {
             $result = Resend::emails()->send([
-                'from' => 'Clear Boat Bahamas <bookings@clearboatbahamas.com>',
+                'from' => 'Clear Boat Bahamas <bookings@mail.clearboatbahamas.com>',
                 'to' => [$guest->email],
-                'subject' => "Booking Received: {$booking->booking_ref}",
-                'html' => $this->buildHtml($booking),
+                'subject' => "Booking Confirmed — {$booking->booking_ref}",
+                'html' => $this->buildReceiptHtml($booking, $allComplete),
             ]);
 
             EmailLog::create([
                 'booking_id' => $booking->id,
                 'recipient' => $guest->email,
-                'subject' => "Booking Received: {$booking->booking_ref}",
-                'template' => 'booking_confirmation',
+                'subject' => "Booking Confirmed — {$booking->booking_ref}",
+                'template' => $allComplete ? 'booking_receipt_with_tickets' : 'booking_receipt',
                 'resend_id' => $result->id ?? null,
                 'status' => 'sent',
             ]);
 
-            // Send ticket email if all guests are complete
-            if ($this->ticketService->getAllGuestsComplete($booking)) {
+            // Send separate ticket email if all guests are complete
+            if ($allComplete) {
                 $this->sendTicketEmail($booking);
             }
         } catch (\Exception $e) {
             EmailLog::create([
                 'booking_id' => $booking->id,
                 'recipient' => $guest->email,
-                'subject' => "Booking Received: {$booking->booking_ref}",
-                'template' => 'booking_confirmation',
+                'subject' => "Booking Confirmed — {$booking->booking_ref}",
+                'template' => 'booking_receipt',
                 'status' => 'failed',
             ]);
             throw $e;
@@ -60,16 +62,18 @@ class EmailService
         $booking->loadMissing(['primaryGuest', 'timeSlot.boat', 'items']);
         $guest = $booking->primaryGuest;
 
-        if (!$guest || !config('services.resend.api_key')) {
+        if (!$guest || !config('services.resend.key')) {
             return;
         }
 
         try {
+            $downloadUrl = "https://bookings.clearboatbahamas.com/book/confirmation?ref={$booking->booking_ref}&email=" . urlencode($guest->email);
+
             $result = Resend::emails()->send([
-                'from' => 'Clear Boat Bahamas <bookings@clearboatbahamas.com>',
+                'from' => 'Clear Boat Bahamas <bookings@mail.clearboatbahamas.com>',
                 'to' => [$guest->email],
                 'subject' => "Your Tickets: {$booking->booking_ref}",
-                'html' => $this->buildTicketHtml($booking),
+                'html' => $this->buildTicketHtml($booking, $downloadUrl),
             ]);
 
             EmailLog::create([
@@ -91,77 +95,434 @@ class EmailService
         }
     }
 
-    private function buildTicketHtml(Booking $booking): string
+    private function buildReceiptHtml(Booking $booking, bool $guestsComplete = false): string
     {
         $guest = $booking->primaryGuest;
         $boat = $booking->timeSlot->boat;
-        $date = $booking->tour_date->format('l, F j, Y');
-        $time = $booking->timeSlot->start_time->format('g:i A') . ' - ' . $booking->timeSlot->end_time->format('g:i A');
-        $total = '$' . number_format($booking->grand_total / 100, 2);
-        $downloadUrl = 'https://clearwater.ourea.tech/api/tickets/pdf?ref=' . $booking->booking_ref;
+        $date = \Illuminate\Support\Carbon::parse($booking->tour_date)->format('l, F j, Y');
+        $time = \Illuminate\Support\Carbon::parse($booking->timeSlot->start_time)->format('g:i A') . ' - ' . \Illuminate\Support\Carbon::parse($booking->timeSlot->end_time)->format('g:i A');
+        $subtotal = '$' . number_format($booking->total_price_cents / 100, 2);
+        $fees = '$' . number_format(($booking->fees_cents ?? 0) / 100, 2);
+        $grandTotal = '$' . number_format(($booking->total_price_cents + ($booking->fees_cents ?? 0)) / 100, 2);
 
+        $confirmationUrl = "https://bookings.clearboatbahamas.com/book/confirmation?ref={$booking->booking_ref}&email=" . urlencode($guest->email);
+
+        // Build items table
         $itemsHtml = '';
         foreach ($booking->items as $item) {
+            $label = ucfirst($item->ticket_type) . ($item->ticket_type === 'adult' ? ' Ticket' : ' Ticket');
             $price = '$' . number_format($item->unit_price_cents / 100, 2);
             $lineTotal = '$' . number_format(($item->quantity * $item->unit_price_cents) / 100, 2);
-            $itemsHtml .= "<tr><td style=\"padding:8px; border:1px solid #eee;\">{$item->ticket_type}</td><td style=\"padding:8px; border:1px solid #eee; text-align:center;\">{$item->quantity}</td><td style=\"padding:8px; border:1px solid #eee; text-align:right;\">{$price}</td><td style=\"padding:8px; border:1px solid #eee; text-align:right;\">{$lineTotal}</td></tr>";
+            $itemsHtml .= "<tr>
+                <td style=\"padding:10px 12px; border-bottom:1px solid #e5e7eb;\">{$label}</td>
+                <td style=\"padding:10px 12px; border-bottom:1px solid #e5e7eb; text-align:center;\">{$item->quantity}</td>
+                <td style=\"padding:10px 12px; border-bottom:1px solid #e5e7eb; text-align:right;\">{$price}</td>
+                <td style=\"padding:10px 12px; border-bottom:1px solid #e5e7eb; text-align:right;\">{$lineTotal}</td>
+            </tr>";
+        }
+
+        // Addons
+        foreach ($booking->addons as $addonItem) {
+            if ($addonItem->addon) {
+                $price = '$' . number_format($addonItem->unit_price_cents / 100, 2);
+                $lineTotal = '$' . number_format(($addonItem->quantity * $addonItem->unit_price_cents) / 100, 2);
+                $itemsHtml .= "<tr>
+                    <td style=\"padding:10px 12px; border-bottom:1px solid #e5e7eb;\">{$addonItem->addon->title}</td>
+                    <td style=\"padding:10px 12px; border-bottom:1px solid #e5e7eb; text-align:center;\">{$addonItem->quantity}</td>
+                    <td style=\"padding:10px 12px; border-bottom:1px solid #e5e7eb; text-align:right;\">{$price}</td>
+                    <td style=\"padding:10px 12px; border-bottom:1px solid #e5e7eb; text-align:right;\">{$lineTotal}</td>
+                </tr>";
+            }
+        }
+
+        // Conditional CTA section
+        if ($guestsComplete) {
+            $ctaHtml = <<<CTA
+                    <!-- CTA Button -->
+                    <tr>
+                        <td style="padding:32px; text-align:center;">
+                            <a href="{$confirmationUrl}" style="display:inline-block; background-color:#0d9488; color:#ffffff; padding:14px 40px; border-radius:8px; text-decoration:none; font-weight:600; font-size:16px;">
+                                View Your Booking Details
+                            </a>
+                            <p style="margin:12px 0 0; font-size:13px; color:#9ca3af;">
+                                Visit this page to view your full booking details, manage your reservation, and download your tickets for check-in.
+                            </p>
+                        </td>
+                    </tr>
+CTA;
+        } else {
+            $ctaHtml = <<<CTA
+                    <!-- Pending Guest Info Notice -->
+                    <tr>
+                        <td style="padding:32px; text-align:center;">
+                            <div style="display:inline-block; background:#fffbeb; border:1px solid #fde68a; border-radius:10px; padding:20px 28px; max-width:460px; text-align:left;">
+                                <p style="margin:0 0 8px; font-size:15px; font-weight:600; color:#92400e;">📋 Guest Information Required</p>
+                                <p style="margin:0; font-size:14px; color:#78350f; line-height:1.6;">
+                                    A staff member will reach out to you shortly to confirm the guest information for your booking. Once all guest details are complete, your tickets will be available for download.
+                                </p>
+                            </div>
+                            <p style="margin:16px 0 0; font-size:13px; color:#9ca3af;">
+                                You'll receive a follow-up email with a link to download your tickets once everything is confirmed.
+                            </p>
+                        </td>
+                    </tr>
+CTA;
         }
 
         return <<<HTML
-        <div style="font-family: system-ui, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2>Your Tickets Are Ready! 🎫</h2>
-            <p>Hi {$guest->first_name},</p>
-            <p>Your booking with <strong>Clear Boat Bahamas</strong> is confirmed! Download your tickets below.</p>
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body style="margin:0; padding:0; background-color:#f9fafb; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f9fafb;">
+        <tr>
+            <td align="center" style="padding: 40px 16px;">
+                <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px; width:100%; background:#ffffff; border-radius:12px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+                    <!-- Header -->
+                    <tr>
+                        <td style="padding: 32px 32px 24px; text-align:center; background: linear-gradient(135deg, #0d9488, #0f766e);">
+                            <h1 style="margin:0; color:#ffffff; font-size:24px; font-weight:700;">Booking Confirmed!</h1>
+                            <p style="margin:8px 0 0; color:#ccfbf1; font-size:15px;">Thank you, {$guest->first_name}! Your tour is booked.</p>
+                        </td>
+                    </tr>
 
-            <table style="width:100%; border-collapse:collapse; margin: 20px 0;">
-                <tr><td style="padding:8px; border:1px solid #eee;"><strong>Reference</strong></td><td style="padding:8px; border:1px solid #eee;">{$booking->booking_ref}</td></tr>
-                <tr><td style="padding:8px; border:1px solid #eee;"><strong>Boat</strong></td><td style="padding:8px; border:1px solid #eee;">{$boat->name}</td></tr>
-                <tr><td style="padding:8px; border:1px solid #eee;"><strong>Date</strong></td><td style="padding:8px; border:1px solid #eee;">{$date}</td></tr>
-                <tr><td style="padding:8px; border:1px solid #eee;"><strong>Time</strong></td><td style="padding:8px; border:1px solid #eee;">{$time}</td></tr>
-            </table>
+                    <!-- Booking Ref -->
+                    <tr>
+                        <td style="padding:24px 32px 0; text-align:center;">
+                            <span style="display:inline-block; background:#f0fdfa; color:#0d9488; font-size:13px; font-weight:600; padding:6px 16px; border-radius:9999px; letter-spacing:0.5px;">
+                                REF: {$booking->booking_ref}
+                            </span>
+                        </td>
+                    </tr>
 
-            <table style="width:100%; border-collapse:collapse; margin: 20px 0;">
-                <tr style="background:#f8f8f8;"><th style="padding:8px; border:1px solid #eee; text-align:left;">Ticket</th><th style="padding:8px; border:1px solid #eee;">Qty</th><th style="padding:8px; border:1px solid #eee; text-align:right;">Price</th><th style="padding:8px; border:1px solid #eee; text-align:right;">Total</th></tr>
-                {$itemsHtml}
-            </table>
+                    <!-- Trip Details -->
+                    <tr>
+                        <td style="padding:20px 32px 0;">
+                            <table width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td style="padding-bottom:12px;">
+                                        <table width="100%" cellpadding="0" cellspacing="0">
+                                            <tr>
+                                                <td style="padding:10px 14px; background:#f9fafb; border-radius:8px; width:50%;">
+                                                    <p style="margin:0; font-size:12px; color:#6b7280;">Date</p>
+                                                    <p style="margin:4px 0 0; font-size:15px; font-weight:600; color:#111827;">{$date}</p>
+                                                </td>
+                                                <td style="width:8px;"></td>
+                                                <td style="padding:10px 14px; background:#f9fafb; border-radius:8px; width:50%;">
+                                                    <p style="margin:0; font-size:12px; color:#6b7280;">Time</p>
+                                                    <p style="margin:4px 0 0; font-size:15px; font-weight:600; color:#111827;">{$time}</p>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td style="padding:10px 14px; background:#f9fafb; border-radius:8px; width:50%; margin-top:8px; display:inline-block;">
+                                                    <p style="margin:0; font-size:12px; color:#6b7280;">Boat</p>
+                                                    <p style="margin:4px 0 0; font-size:15px; font-weight:600; color:#111827;">{$boat->name}</p>
+                                                </td>
+                                                <td style="width:8px;"></td>
+                                                <td style="padding:10px 14px; background:#f9fafb; border-radius:8px; width:50%; margin-top:8px; display:inline-block;">
+                                                    <p style="margin:0; font-size:12px; color:#6b7280;">Guests</p>
+                                                    <p style="margin:4px 0 0; font-size:15px; font-weight:600; color:#111827;">{$booking->items->sum('quantity')} passengers</p>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
 
-            <p style="text-align:right; font-size:18px; font-weight:bold;">Total: {$total}</p>
+                    <!-- Receipt Breakdown -->
+                    <tr>
+                        <td style="padding:24px 32px 0;">
+                            <h2 style="margin:0 0 12px; font-size:16px; font-weight:700; color:#111827;">Receipt Breakdown</h2>
+                            <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+                                <thead>
+                                    <tr style="background:#f9fafb;">
+                                        <th style="padding:10px 12px; text-align:left; font-size:12px; font-weight:600; color:#6b7280; text-transform:uppercase; letter-spacing:0.5px;">Item</th>
+                                        <th style="padding:10px 12px; text-align:center; font-size:12px; font-weight:600; color:#6b7280; text-transform:uppercase; letter-spacing:0.5px;">Qty</th>
+                                        <th style="padding:10px 12px; text-align:right; font-size:12px; font-weight:600; color:#6b7280; text-transform:uppercase; letter-spacing:0.5px;">Price</th>
+                                        <th style="padding:10px 12px; text-align:right; font-size:12px; font-weight:600; color:#6b7280; text-transform:uppercase; letter-spacing:0.5px;">Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {$itemsHtml}
+                                </tbody>
+                                <tfoot>
+                                    <tr>
+                                        <td colspan="3" style="padding:10px 12px; text-align:right; font-size:14px; color:#6b7280;">Subtotal</td>
+                                        <td style="padding:10px 12px; text-align:right; font-size:14px; color:#111827;">{$subtotal}</td>
+                                    </tr>
+                                    <tr>
+                                        <td colspan="3" style="padding:4px 12px 10px; text-align:right; font-size:14px; color:#6b7280;">Booking Fee</td>
+                                        <td style="padding:4px 12px 10px; text-align:right; font-size:14px; color:#111827;">{$fees}</td>
+                                    </tr>
+                                    <tr>
+                                        <td colspan="3" style="padding:10px 12px; text-align:right; font-size:18px; font-weight:700; border-top:2px solid #0d9488; color:#0d9488;">Grand Total</td>
+                                        <td style="padding:10px 12px; text-align:right; font-size:18px; font-weight:700; border-top:2px solid #0d9488; color:#0d9488;">{$grandTotal}</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </td>
+                    </tr>
 
-            <div style="text-align:center; margin:30px 0;">
-                <a href="{$downloadUrl}" style="display:inline-block; background-color:#0d9488; color:white; padding:14px 32px; border-radius:8px; text-decoration:none; font-weight:600; font-size:16px;">Download Your Tickets</a>
-            </div>
+                    {$ctaHtml}
 
-            <p style="color:#666; font-size:13px;">Present your QR codes at check-in. See you on board!</p>
-            <p><em>Clear Boat Bahamas</em></p>
-        </div>
-        HTML;
+                    <!-- Footer -->
+                    <tr>
+                        <td style="padding:24px 32px; background:#f9fafb; text-align:center;">
+                            <p style="margin:0; font-size:13px; color:#6b7280;">
+                                Clear Boat Bahamas
+                                <br>
+                                <span style="font-size:12px; color:#9ca3af;">
+                                    Need help? Reply to this email or contact us directly.
+                                </span>
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+HTML;
     }
 
-    private function buildHtml(Booking $booking): string
+    private function buildTicketHtml(Booking $booking, string $downloadUrl): string
     {
         $guest = $booking->primaryGuest;
         $boat = $booking->timeSlot->boat;
-        $date = $booking->tour_date->format('l, F j, Y');
-        $time = $booking->timeSlot->start_time->format('g:i A') . ' - ' . $booking->timeSlot->end_time->format('g:i A');
-        $total = '$' . number_format($booking->total_price_cents / 100, 2);
+        $date = $booking->tour_date->format('F j, Y');
+        $time = \Carbon\Carbon::parse($booking->timeSlot->start_time)->format('g:i A');
+
+        $itemsHtml = '';
+        foreach ($booking->items as $item) {
+            $label = ucfirst($item->ticket_type) . ' Ticket';
+            $price = '$' . number_format($item->unit_price_cents / 100, 2);
+            $lineTotal = '$' . number_format(($item->quantity * $item->unit_price_cents) / 100, 2);
+            $itemsHtml .= "<tr><td style=\"padding:8px; border:1px solid #eee;\">{$label}</td><td style=\"padding:8px; border:1px solid #eee; text-align:center;\">{$item->quantity}</td><td style=\"padding:8px; border:1px solid #eee; text-align:right;\">{$price}</td><td style=\"padding:8px; border:1px solid #eee; text-align:right;\">{$lineTotal}</td></tr>";
+        }
 
         return <<<HTML
-        <div style="font-family: system-ui, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2>Booking Received 🎉</h2>
-            <p>Hi {$guest->first_name},</p>
-            <p>We've received your booking with <strong>Clear Boat Bahamas</strong>. Please complete payment to confirm your reservation.</p>
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body style="margin:0; padding:0; background-color:#f9fafb; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f9fafb;">
+        <tr>
+            <td align="center" style="padding: 40px 16px;">
+                <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px; width:100%; background:#ffffff; border-radius:12px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+                    <tr>
+                        <td style="padding: 32px 32px 24px; text-align:center; background: linear-gradient(135deg, #0d9488, #0f766e);">
+                            <h1 style="margin:0; color:#ffffff; font-size:24px; font-weight:700;">Your Tickets Are Ready! 🎫</h1>
+                            <p style="margin:8px 0 0; color:#ccfbf1; font-size:15px;">{$booking->booking_ref}</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:20px 32px 0;">
+                            <table width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td style="padding:10px 14px; background:#f9fafb; border-radius:8px; width:50%;">
+                                        <p style="margin:0; font-size:12px; color:#6b7280;">{$boat->name}</p>
+                                        <p style="margin:4px 0 0; font-size:15px; font-weight:600; color:#111827;">{$date}</p>
+                                    </td>
+                                    <td style="width:8px;"></td>
+                                    <td style="padding:10px 14px; background:#f9fafb; border-radius:8px; width:50%;">
+                                        <p style="margin:0; font-size:12px; color:#6b7280;">{$time}</p>
+                                        <p style="margin:4px 0 0; font-size:15px; font-weight:600; color:#111827;">{$guest->first_name} {$guest->last_name}</p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:32px; text-align:center;">
+                            <a href="{$downloadUrl}" style="display:inline-block; background-color:#0d9488; color:#ffffff; padding:14px 40px; border-radius:8px; text-decoration:none; font-weight:600; font-size:16px;">
+                                Download Your Tickets (PDF)
+                            </a>
+                            <p style="margin:12px 0 0; font-size:13px; color:#9ca3af;">
+                                Each ticket includes a QR code for check-in. Present them on your phone or printed.
+                            </p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:24px 32px; background:#f9fafb; text-align:center;">
+                            <p style="margin:0; font-size:12px; color:#9ca3af;">Clear Boat Bahamas</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+HTML;
+    }
 
-            <table style="width:100%; border-collapse:collapse; margin: 20px 0;">
-                <tr><td style="padding:8px; border:1px solid #eee;"><strong>Reference</strong></td><td style="padding:8px; border:1px solid #eee;">{$booking->booking_ref}</td></tr>
-                <tr><td style="padding:8px; border:1px solid #eee;"><strong>Boat</strong></td><td style="padding:8px; border:1px solid #eee;">{$boat->name}</td></tr>
-                <tr><td style="padding:8px; border:1px solid #eee;"><strong>Date</strong></td><td style="padding:8px; border:1px solid #eee;">{$date}</td></tr>
-                <tr><td style="padding:8px; border:1px solid #eee;"><strong>Time</strong></td><td style="padding:8px; border:1px solid #eee;">{$time}</td></tr>
-                <tr><td style="padding:8px; border:1px solid #eee;"><strong>Total</strong></td><td style="padding:8px; border:1px solid #eee;">{$total}</td></tr>
-            </table>
+    public function sendGuestsCompletedEmail(Booking $booking): void
+    {
+        $booking->loadMissing(['primaryGuest', 'timeSlot.boat', 'items', 'addons.addon']);
+        $guest = $booking->primaryGuest;
 
-            <p>We look forward to seeing you on board!</p>
-            <p><em>Clear Boat Bahamas</em></p>
-        </div>
-        HTML;
+        if (!$guest || !config('services.resend.key')) {
+            return;
+        }
+
+        $boat = $booking->timeSlot->boat;
+        $date = \Illuminate\Support\Carbon::parse($booking->tour_date)->format('l, F j, Y');
+        $time = \Illuminate\Support\Carbon::parse($booking->timeSlot->start_time)->format('g:i A') . ' - ' . \Illuminate\Support\Carbon::parse($booking->timeSlot->end_time)->format('g:i A');
+        $grandTotal = '$' . number_format(($booking->total_price_cents + ($booking->fees_cents ?? 0)) / 100, 2);
+        $confirmationUrl = "https://bookings.clearboatbahamas.com/book/confirmation?ref={$booking->booking_ref}&email=" . urlencode($guest->email);
+
+        $itemsHtml = '';
+        foreach ($booking->items as $item) {
+            $label = ucfirst($item->ticket_type) . ' Ticket';
+            $price = '$' . number_format($item->unit_price_cents / 100, 2);
+            $lineTotal = '$' . number_format(($item->quantity * $item->unit_price_cents) / 100, 2);
+            $itemsHtml .= "<tr>
+                <td style=\"padding:10px 12px; border-bottom:1px solid #e5e7eb;\">{$label}</td>
+                <td style=\"padding:10px 12px; border-bottom:1px solid #e5e7eb; text-align:center;\">{$item->quantity}</td>
+                <td style=\"padding:10px 12px; border-bottom:1px solid #e5e7eb; text-align:right;\">{$price}</td>
+                <td style=\"padding:10px 12px; border-bottom:1px solid #e5e7eb; text-align:right;\">{$lineTotal}</td>
+            </tr>";
+        }
+        foreach ($booking->addons as $addonItem) {
+            if ($addonItem->addon) {
+                $price = '$' . number_format($addonItem->unit_price_cents / 100, 2);
+                $lineTotal = '$' . number_format(($addonItem->quantity * $addonItem->unit_price_cents) / 100, 2);
+                $itemsHtml .= "<tr>
+                    <td style=\"padding:10px 12px; border-bottom:1px solid #e5e7eb;\">{$addonItem->addon->title}</td>
+                    <td style=\"padding:10px 12px; border-bottom:1px solid #e5e7eb; text-align:center;\">{$addonItem->quantity}</td>
+                    <td style=\"padding:10px 12px; border-bottom:1px solid #e5e7eb; text-align:right;\">{$price}</td>
+                    <td style=\"padding:10px 12px; border-bottom:1px solid #e5e7eb; text-align:right;\">{$lineTotal}</td>
+                </tr>";
+            }
+        }
+
+        $html = <<<HTML
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body style="margin:0; padding:0; background-color:#f9fafb; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f9fafb;">
+        <tr>
+            <td align="center" style="padding: 40px 16px;">
+                <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px; width:100%; background:#ffffff; border-radius:12px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+                    <tr>
+                        <td style="padding: 32px 32px 24px; text-align:center; background: linear-gradient(135deg, #0d9488, #0f766e);">
+                            <h1 style="margin:0; color:#ffffff; font-size:24px; font-weight:700;">Guest Information Complete! ✅</h1>
+                            <p style="margin:8px 0 0; color:#ccfbf1; font-size:15px;">All guest details have been confirmed for your tour.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:24px 32px 0; text-align:center;">
+                            <span style="display:inline-block; background:#f0fdfa; color:#0d9488; font-size:13px; font-weight:600; padding:6px 16px; border-radius:9999px; letter-spacing:0.5px;">
+                                REF: {$booking->booking_ref}
+                            </span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:20px 32px 0;">
+                            <table width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td style="padding:10px 14px; background:#f9fafb; border-radius:8px; width:50%;">
+                                        <p style="margin:0; font-size:12px; color:#6b7280;">Date</p>
+                                        <p style="margin:4px 0 0; font-size:15px; font-weight:600; color:#111827;">{$date}</p>
+                                    </td>
+                                    <td style="width:8px;"></td>
+                                    <td style="padding:10px 14px; background:#f9fafb; border-radius:8px; width:50%;">
+                                        <p style="margin:0; font-size:12px; color:#6b7280;">Time</p>
+                                        <p style="margin:4px 0 0; font-size:15px; font-weight:600; color:#111827;">{$time}</p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:24px 32px;">
+                            <p style="margin:0 0 16px; font-size:15px; color:#374151;">Hi {$guest->first_name},</p>
+                            <p style="margin:0 0 12px; font-size:15px; color:#374151;">
+                                Great news! All guest information for your booking has been completed. Below is your receipt for reference.
+                            </p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:0 32px;">
+                            <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb; border-radius:8px; overflow:hidden;">
+                                <tr style="background:#f9fafb;">
+                                    <th style="padding:10px 12px; text-align:left; font-size:13px; color:#6b7280; border-bottom:1px solid #e5e7eb;">Item</th>
+                                    <th style="padding:10px 12px; text-align:center; font-size:13px; color:#6b7280; border-bottom:1px solid #e5e7eb;">Qty</th>
+                                    <th style="padding:10px 12px; text-align:right; font-size:13px; color:#6b7280; border-bottom:1px solid #e5e7eb;">Price</th>
+                                    <th style="padding:10px 12px; text-align:right; font-size:13px; color:#6b7280; border-bottom:1px solid #e5e7eb;">Total</th>
+                                </tr>
+                                {$itemsHtml}
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:16px 32px 0; text-align:right;">
+                            <p style="margin:0; font-size:16px; font-weight:700; color:#111827;">Total: {$grandTotal}</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:28px 32px; text-align:center;">
+                            <p style="margin:0 0 16px; font-size:15px; color:#374151;">
+                                Your tickets are ready to download! Click the button below to visit your booking confirmation page, where you will find a <strong>download button</strong> to save your tickets as a PDF.
+                            </p>
+                            <a href="{$confirmationUrl}" style="display:inline-block; background-color:#0d9488; color:#ffffff; padding:14px 40px; border-radius:8px; text-decoration:none; font-weight:600; font-size:16px;">
+                                View Booking & Download Tickets
+                            </a>
+                            <p style="margin:12px 0 0; font-size:13px; color:#9ca3af;">
+                                Each ticket includes a QR code for check-in. Present them on your phone or printed.
+                            </p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:24px 32px; background:#f9fafb; text-align:center;">
+                            <p style="margin:0; font-size:12px; color:#9ca3af;">Clear Boat Bahamas</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+HTML;
+
+        try {
+            $result = Resend::emails()->send([
+                'from' => 'Clear Boat Bahamas <bookings@mail.clearboatbahamas.com>',
+                'to' => [$guest->email],
+                'subject' => "Guest Info Complete — Tickets Ready for {$booking->booking_ref}",
+                'html' => $html,
+            ]);
+
+            EmailLog::create([
+                'booking_id' => $booking->id,
+                'recipient' => $guest->email,
+                'subject' => "Guest Info Complete — Tickets Ready for {$booking->booking_ref}",
+                'template' => 'guests_completed_receipt',
+                'resend_id' => $result->id ?? null,
+                'status' => 'sent',
+            ]);
+        } catch (\Exception $e) {
+            EmailLog::create([
+                'booking_id' => $booking->id,
+                'recipient' => $guest->email,
+                'subject' => "Guest Info Complete — Tickets Ready for {$booking->booking_ref}",
+                'template' => 'guests_completed_receipt',
+                'status' => 'failed',
+            ]);
+        }
     }
 }

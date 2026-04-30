@@ -12,6 +12,12 @@ use Filament\Tables\Table;
 
 class EmailLogResource extends Resource
 {
+        public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+        return $user && in_array($user->role, ['admin', 'super_admin']);
+    }
+
     protected static ?string $model = EmailLog::class;
     protected static ?string $navigationIcon = 'heroicon-o-envelope';
     protected static ?int $navigationSort = 60;
@@ -53,7 +59,17 @@ class EmailLogResource extends Resource
                 Tables\Columns\TextColumn::make('sent_at')->dateTime(),
             ])
             ->filters([
-                Tables\Filters\SelectFilter::make('status')
+                Tables\Filters\Filter::make("created_at_range")
+                    ->label("Created Date")
+                    ->form([
+                        \Filament\Forms\Components\DatePicker::make("from")->label("From")->closeOnDateSelection(),
+                        \Filament\Forms\Components\DatePicker::make("until")->label("Until")->closeOnDateSelection(),
+                    ])
+                    ->query(function ($query, array $data): void {
+                        $query->when($data["from"], fn ($q, $v) => $q->whereDate("created_at", ">=", $v))
+                            ->when($data["until"], fn ($q, $v) => $q->whereDate("created_at", "<=", $v));
+                    }),
+                                Tables\Filters\SelectFilter::make('status')
                     ->options(['sent' => 'Sent', 'failed' => 'Failed', 'pending' => 'Pending']),
                 Tables\Filters\SelectFilter::make('template'),
             ])

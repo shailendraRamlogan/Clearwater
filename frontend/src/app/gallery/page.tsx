@@ -46,7 +46,7 @@ export default function GalleryPage() {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   useEffect(() => {
-    fetch("/api/gallery-photos")
+    fetch(`${process.env.NEXT_PUBLIC_API_URL}/gallery-photos`)
       .then((res) => {
         if (!res.ok) throw new Error("Failed to load gallery");
         return res.json();

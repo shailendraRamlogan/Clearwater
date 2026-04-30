@@ -1,4 +1,4 @@
-import type { TimeSlot, Booking, DailyReport, TicketType } from "@/types/booking";
+import type { TimeSlot, Booking, DailyReport, TicketType, Addon } from "@/types/booking";
 import api from "@/lib/api";
 
 // Static mock time slots matching the Clear Boat schedule
@@ -56,9 +56,7 @@ const MOCK_BOOKINGS: Booking[] = [
       { ticket_type: "adult", quantity: 2, unit_price: 200 },
       { ticket_type: "child", quantity: 1, unit_price: 150 },
     ],
-    package_upgrade: true,
-    special_occasion: true,
-    special_comment: "Anniversary celebration! 🎉",
+    addons: [],
     total_price: 725,
     fees_cents: 0,
     fees_breakdown: [],
@@ -76,9 +74,7 @@ const MOCK_BOOKINGS: Booking[] = [
       { ticket_type: "adult", quantity: 3, unit_price: 200 },
       { ticket_type: "child", quantity: 2, unit_price: 150 },
     ],
-    package_upgrade: false,
-    special_occasion: false,
-    special_comment: "",
+    addons: [],
     total_price: 900,
     fees_cents: 0,
     fees_breakdown: [],
@@ -95,9 +91,7 @@ const MOCK_BOOKINGS: Booking[] = [
     items: [
       { ticket_type: "adult", quantity: 1, unit_price: 200 },
     ],
-    package_upgrade: true,
-    special_occasion: false,
-    special_comment: "",
+    addons: [],
     total_price: 275,
     fees_cents: 0,
     fees_breakdown: [],
@@ -115,9 +109,7 @@ const MOCK_BOOKINGS: Booking[] = [
       { ticket_type: "adult", quantity: 2, unit_price: 200 },
       { ticket_type: "child", quantity: 3, unit_price: 150 },
     ],
-    package_upgrade: true,
-    special_occasion: true,
-    special_comment: "Daughter's 10th birthday! Can we arrange a small cake?",
+    addons: [],
     total_price: 1175,
     fees_cents: 0,
     fees_breakdown: [],
@@ -152,8 +144,7 @@ export async function createBooking(payload: {
   time_slot_id: string;
   adult_count: number;
   child_count: number;
-  package_upgrade: boolean;
-  special_occasion: boolean;
+  addons: { addon_id: string; quantity: number }[];
   special_comment: string;
   guest: { first_name: string; last_name: string; email: string; phone: string };
   guests: { first_name: string; last_name: string; email: string; phone: string }[];
@@ -170,13 +161,11 @@ export async function createBooking(payload: {
         { ticket_type: "adult", quantity: payload.adult_count, unit_price: 200 },
         { ticket_type: "child", quantity: payload.child_count, unit_price: 150 },
       ],
-      package_upgrade: payload.package_upgrade,
-      special_occasion: payload.special_occasion,
-      special_comment: payload.special_comment,
+      addons: payload.addons.map(a => ({ ...a, title: "", unit_price_cents: 0 })),
       total_price:
         payload.adult_count * 200 +
         payload.child_count * 150 +
-        (payload.package_upgrade ? (payload.adult_count + payload.child_count) * 75 : 0),
+        payload.addons.reduce((sum, a) => sum + (a.quantity * (a.addon_id === 'addon-photo' ? 75 : 0)), 0),
       status: "confirmed",
       fees_cents: 0,
       fees_breakdown: [],
@@ -273,6 +262,18 @@ export async function getTicketTypes(): Promise<TicketType[]> {
   return data;
 }
 
+
+export async function getAddons(): Promise<Addon[]> {
+  if (USE_MOCK) {
+    await delay(300);
+    return [
+      { id: 'addon-photo', title: 'Photo Package Upgrade', description: 'All edited digital photos plus printed copies.', price_cents: 7500, price_dollars: 75, is_active: true, sort_order: 1, max_quantity: 1, icon_name: 'Camera' },
+      { id: 'addon-special', title: 'Special Occasion', description: 'Birthday, anniversary, proposal? Let us know!', price_cents: 0, price_dollars: 0, is_active: true, sort_order: 2, max_quantity: 1, icon_name: 'PartyPopper' },
+    ];
+  }
+  const { data } = await api.get("/addons");
+  return data;
+}
 export async function getPricing(): Promise<{ adult: number; child: number; upgrade: number; fees: { name: string; type: string; value: number }[] }> {
   const { data } = await api.get("/pricing");
   return data;

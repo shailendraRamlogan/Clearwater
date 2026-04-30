@@ -8,7 +8,7 @@ use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
 {
-    use WithoutModelEvents;
+    
 
     /**
      * Seed the application's database.
@@ -16,10 +16,12 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $this->call([
+            TicketTypeSeeder::class,
             BoatSeeder::class,
             TestDataSeeder::class,
             BookingFeeSeeder::class,
             GalleryPhotoSeeder::class,
+            AddonSeeder::class,
         ]);
     }
 }

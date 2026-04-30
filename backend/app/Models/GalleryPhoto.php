@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Storage;
 
@@ -41,7 +40,7 @@ class GalleryPhoto extends Model
             return $this->url;
         }
         if ($this->image) {
-            return Storage::url($this->image);
+            return Storage::disk('public')->url($this->image);
         }
         return null;
     }

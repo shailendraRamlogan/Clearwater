@@ -12,6 +12,12 @@ use Filament\Tables\Table;
 
 class BoatResource extends Resource
 {
+        public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+        return $user && in_array($user->role, ['admin', 'super_admin']);
+    }
+
     protected static ?string $model = Boat::class;
     protected static ?string $navigationIcon = 'heroicon-o-globe-americas';
     protected static ?int $navigationSort = 10;

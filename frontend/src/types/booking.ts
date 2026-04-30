@@ -27,15 +27,25 @@ export interface BookingItem {
   unit_price: number;
 }
 
+export interface Addon {
+  id: string;
+  title: string;
+  description: string | null;
+  price_cents: number;
+  price_dollars: number;
+  is_active: boolean;
+  sort_order: number;
+  max_quantity: number | null;
+  icon_name: string | null;
+}
+
 export interface Booking {
   id: string;
   tour_date: string;
   time_slot: TimeSlot;
   guest: BookingGuest;
   items: BookingItem[];
-  package_upgrade: boolean;
-  special_occasion: boolean;
-  special_comment: string;
+  addons: { addon_id: string; title: string; quantity: number; unit_price_cents: number }[];
   total_price: number;
   fees_cents: number;
   fees_breakdown: { name: string; type: string; amount_cents: number; display: string }[];

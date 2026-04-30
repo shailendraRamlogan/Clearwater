@@ -105,9 +105,9 @@ export default function AdminBookings() {
                         .join(", ")}
                     </span>
                   </div>
-                  {booking.special_occasion && booking.special_comment && (
+                  {booking.addons && booking.addons.length > 0 && (
                     <p className="mt-2 text-sm text-ocean-500 italic bg-sand-50 rounded-lg px-3 py-2">
-                      🎉 {booking.special_comment}
+                      {booking.addons.map(a => a.title).join(", ")}
                     </p>
                   )}
                 </div>

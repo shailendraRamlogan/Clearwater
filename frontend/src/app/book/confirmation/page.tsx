@@ -45,7 +45,7 @@ function BookingConfirmationContent() {
     api
       .get(`/bookings/lookup`, { params: { ref, email: searchParams.get('email') || '' } })
       .then((res) => {
-        const b = res.data.booking;
+        const b = res.data;
         setBooking({
           id: b.id,
           tour_date: b.tour_date,
@@ -64,6 +64,7 @@ function BookingConfirmationContent() {
           special_comment: b.special_comment,
         });
       })
+      .catch(() => { setNotFound(true); })
       .finally(() => setLoading(false));
   }, [ref]);
 
@@ -186,7 +187,7 @@ function BookingConfirmationContent() {
             <Button
               className="text-white"
               style={{ backgroundColor: '#0369a1' }}
-              onClick={() => window.open(`/api/tickets/pdf?ref=${booking.id}`, '_blank')}
+              onClick={() => window.open(`${process.env.NEXT_PUBLIC_API_URL}/tickets/pdf?ref=${booking.id}`, '_blank')}
             >
               <Download className="mr-2 h-4 w-4" />
               Download Tickets

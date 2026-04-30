@@ -12,6 +12,18 @@ use Filament\Tables\Table;
 
 class BookingGuestResource extends Resource
 {
+    public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+        return $user && in_array($user->role, ['admin', 'super_admin']);
+    }
+
+    public static function canCreate(): bool
+    {
+        $user = auth()->user();
+        return $user && in_array($user->role, ['admin', 'super_admin']);
+    }
+
     protected static ?string $model = BookingGuest::class;
     protected static ?string $navigationIcon = 'heroicon-o-users';
     protected static ?int $navigationSort = 40;
@@ -50,32 +62,49 @@ class BookingGuestResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->query(function () {
+                // Deduplicate guests by email, showing most recent record per email
+                // with total bookings count
+                return BookingGuest::query()
+                    ->selectRaw('DISTINCT ON (email) *')
+                    ->orderBy('email')
+                    ->orderByDesc('created_at');
+            })
             ->columns([
-                Tables\Columns\TextColumn::make('booking.booking_ref')->searchable(),
-                Tables\Columns\TextColumn::make('first_name')->searchable(),
-                Tables\Columns\TextColumn::make('last_name')->searchable(),
-                Tables\Columns\TextColumn::make('email'),
-                Tables\Columns\TextColumn::make('phone'),
-                Tables\Columns\IconColumn::make('is_primary')->boolean()->label('Primary'),
+                Tables\Columns\TextColumn::make('first_name')
+                    ->searchable()
+                    ->weight('medium'),
+                Tables\Columns\TextColumn::make('last_name')
+                    ->searchable()
+                    ->weight('medium'),
+                Tables\Columns\TextColumn::make('email')
+                    ->searchable()
+                    ->copyable(),
+                Tables\Columns\TextColumn::make('phone')
+                    ->searchable(),
+                Tables\Columns\TextColumn::make('total_bookings')
+                    ->label('Bookings')
+                    ->badge()
+                    ->color('info')
+                    ->alignCenter()
+                    ->getStateUsing(fn ($record) => \App\Models\BookingGuest::where('email', $record->email)->count()),
             ])
             ->filters([
-                Tables\Filters\TernaryFilter::make('is_primary'),
+                Tables\Filters\TernaryFilter::make('is_primary')->label('Primary Only'),
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
+                Tables\Actions\ViewAction::make(),
             ])
             ->bulkActions([
-                Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
-                ]),
-            ]);
+                Tables\Actions\BulkActionGroup::make([]),
+            ])
+            ->defaultSort('email');
     }
 
     public static function getPages(): array
     {
         return [
             'index' => Pages\ListBookingGuests::route('/'),
-            'create' => Pages\CreateBookingGuest::route('/create'),
             'edit' => Pages\EditBookingGuest::route('/{record}/edit'),
         ];
     }
