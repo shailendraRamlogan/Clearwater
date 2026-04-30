@@ -618,10 +618,7 @@ HTML;
         $fees = '$' . number_format(($request->fees_cents ?? 0) / 100, 2);
         $grandTotal = '$' . number_format($request->grand_total / 100, 2);
         $date = $request->confirmed_tour_date ? \Illuminate\Support\Carbon::parse($request->confirmed_tour_date)->format('l, F j, Y') : 'TBD';
-        $time = 'TBD';
-        if ($request->confirmedTimeSlot) {
-            $time = \Carbon\Carbon::createFromFormat('H:i:s', $request->confirmedTimeSlot->start_time)->format('g:i A') . ' - ' . \Carbon\Carbon::createFromFormat('H:i:s', $request->confirmedTimeSlot->end_time)->format('g:i A');
-        }
+        $time = $request->formatted_time ?? 'TBD';
 
         $paymentUrl = $request->payment_url;
         $ctaHtml = '';

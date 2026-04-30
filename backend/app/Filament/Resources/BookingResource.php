@@ -40,9 +40,17 @@ class BookingResource extends Resource
                             ->dehydrated(false),
                         Forms\Components\TextInput::make('time_slot_display')
                             ->label('Time Slot')
-                            ->formatStateUsing(fn ($record) => $record && $record->timeSlot
-                                ? $record->timeSlot->boat?->name . ' — ' . \Carbon\Carbon::createFromFormat('H:i:s', $record->timeSlot->start_time)->format('g:i A')
-                                : '—')
+                            ->formatStateUsing(function ($record) {
+                                if (!$record) return '—';
+                                if ($record->timeSlot) {
+                                    return $record->timeSlot->boat?->name . ' — ' . \Carbon\Carbon::createFromFormat('H:i:s', $record->timeSlot->start_time)->format('g:i A');
+                                }
+                                // Private tour — display from special_comment or fallback
+                                if ($record->source_type === 'private') {
+                                    return 'Private Tour';
+                                }
+                                return '—';
+                            })
                             ->disabled()
                             ->dehydrated(false),
                         Forms\Components\Select::make('status')
@@ -124,8 +132,18 @@ class BookingResource extends Resource
                     ->formatStateUsing(fn ($state) => $state === 'private' ? 'Private Tour' : 'Regular'),
                 Tables\Columns\TextColumn::make('booking_ref')->searchable(),
                 Tables\Columns\TextColumn::make('tour_date')->date(),
-                Tables\Columns\TextColumn::make('timeSlot.boat.name')->label('Boat'),
-                Tables\Columns\TextColumn::make('timeSlot.start_time')->label('Time'),
+                Tables\Columns\TextColumn::make('timeSlot.boat.name')->label('Boat')
+                    ->formatStateUsing(fn ($record) => $record->timeSlot?->boat?->name ?? ($record->source_type === 'private' ? 'Private Tour' : '—')),
+                Tables\Columns\TextColumn::make('timeSlot.start_time')->label('Time')
+                    ->formatStateUsing(function ($record) {
+                        if ($record->timeSlot) {
+                            return \Carbon\Carbon::createFromFormat('H:i:s', $record->timeSlot->start_time)->format('g:i A');
+                        }
+                        if ($record->source_type === 'private') {
+                            return $record->special_comment ?? '—';
+                        }
+                        return '—';
+                    }),
                 Tables\Columns\TextColumn::make('status')
                     ->badge()
                     ->color(fn ($state) => match ($state) {

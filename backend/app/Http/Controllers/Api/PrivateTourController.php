@@ -62,7 +62,7 @@ class PrivateTourController extends Controller
 
     public function index(Request $request)
     {
-        $query = PrivateTourRequest::with(['preferredDates', 'confirmedTimeSlot.boat']);
+        $query = PrivateTourRequest::with(['preferredDates', 'guests']);
 
         if ($request->filled('status')) {
             $query->where('status', $request->query('status'));
@@ -75,7 +75,7 @@ class PrivateTourController extends Controller
 
     public function show(PrivateTourRequest $privateTourRequest)
     {
-        $privateTourRequest->load(['preferredDates', 'guests', 'confirmedTimeSlot.boat', 'booking']);
+        $privateTourRequest->load(['preferredDates', 'guests', 'booking']);
 
         return response()->json([
             'request' => $privateTourRequest,
@@ -98,7 +98,8 @@ class PrivateTourController extends Controller
             $privateTourRequest->update([
                 'status' => PrivateTourRequest::STATUS_CONFIRMED,
                 'confirmed_tour_date' => $validated['confirmed_tour_date'],
-                'confirmed_time_slot_id' => $validated['confirmed_time_slot_id'],
+                'confirmed_start_time' => $validated['confirmed_start_time'],
+                'confirmed_end_time' => $validated['confirmed_end_time'],
                 'total_price_cents' => $validated['total_price_cents'],
                 'fees_cents' => $feeResult['total_fees_cents'],
                 'admin_notes' => $validated['admin_notes'] ?? null,
@@ -118,7 +119,7 @@ class PrivateTourController extends Controller
             }
         });
 
-        $privateTourRequest->refresh()->load(['preferredDates', 'guests', 'confirmedTimeSlot.boat']);
+        $privateTourRequest->refresh()->load(['preferredDates', 'guests']);
 
         // Send confirmation email
         try {
@@ -246,15 +247,15 @@ class PrivateTourController extends Controller
 
         // Convert to regular booking
         $booking = DB::transaction(function () use ($privateTourRequest, $validated) {
-            // Create the regular booking
+            // Create the regular booking (no time_slot_id for private tours)
             $booking = Booking::create([
                 'tour_date' => $privateTourRequest->confirmed_tour_date,
-                'time_slot_id' => $privateTourRequest->confirmed_time_slot_id,
+                'time_slot_id' => null,
                 'status' => 'confirmed',
                 'source_type' => 'private',
                 'photo_upgrade_count' => 0,
                 'special_occasion' => $privateTourRequest->has_occasion ? 'other' : null,
-                'special_comment' => $privateTourRequest->occasion_details,
+                'special_comment' => 'Private Tour — ' . $privateTourRequest->formatted_time,
                 'total_price_cents' => $privateTourRequest->total_price_cents,
                 'fees_cents' => $privateTourRequest->fees_cents,
             ]);
@@ -320,7 +321,7 @@ class PrivateTourController extends Controller
         ]);
 
         $privateTourRequest = PrivateTourRequest::where('booking_ref', $request->query('ref'))
-            ->with(['preferredDates', 'confirmedTimeSlot.boat'])
+            ->with(['preferredDates', 'guests'])
             ->first();
 
         if (!$privateTourRequest) {

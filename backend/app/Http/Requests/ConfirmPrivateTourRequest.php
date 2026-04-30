@@ -10,7 +10,8 @@ class ConfirmPrivateTourRequest extends FormRequest
     {
         return [
             'confirmed_tour_date' => 'required|date|date_format:Y-m-d',
-            'confirmed_time_slot_id' => 'required|uuid|exists:time_slots,id',
+            'confirmed_start_time' => 'required|date_format:H:i',
+            'confirmed_end_time' => 'required|date_format:H:i|after:confirmed_start_time',
             'total_price_cents' => 'required|integer|min:0',
             'admin_notes' => 'nullable|string|max:1000',
             'guests' => 'required|array|min:1',

@@ -68,8 +68,7 @@ class PrivateTourRequestResource extends Resource
                         Forms\Components\TextInput::make('adult_count')
                             ->label('Adults')
                             ->disabled()
-                            ->dehydrated(false)
-                            ->suffix('× $—'),
+                            ->dehydrated(false),
                         Forms\Components\TextInput::make('child_count')
                             ->label('Children (3–17)')
                             ->disabled()
@@ -122,7 +121,7 @@ class PrivateTourRequestResource extends Resource
                     ->collapsed(fn ($record) => !$record?->has_occasion),
 
                 // Admin Actions
-                Forms\Components\Section::make('Admin Actions')
+                Forms\Components\Section::make('Tour Details')
                     ->schema([
                         Forms\Components\DatePicker::make('confirmed_tour_date')
                             ->label('Confirmed Tour Date')
@@ -130,20 +129,40 @@ class PrivateTourRequestResource extends Resource
                             ->minDate(today())
                             ->disabled(fn ($record) => !in_array($record?->status, [PrivateTourRequest::STATUS_REQUESTED]))
                             ->required(),
-                        Forms\Components\Select::make('confirmed_time_slot_id')
-                            ->label('Confirmed Time Slot')
-                            ->options(function () {
-                                return \App\Models\TimeSlot::with('boat')
-                                    ->get()
-                                    ->mapWithKeys(fn ($ts) => [
-                                        $ts->id => $ts->boat?->name . ' — ' .
-                                            \Carbon\Carbon::createFromFormat('H:i:s', $ts->start_time)->format('g:i A') . ' - ' .
-                                            \Carbon\Carbon::createFromFormat('H:i:s', $ts->end_time)->format('g:i A'),
-                                    ]);
-                            })
-                            ->searchable()
-                            ->disabled(fn ($record) => !in_array($record?->status, [PrivateTourRequest::STATUS_REQUESTED]))
-                            ->required(),
+                        Forms\Components\Grid::make(2)
+                            ->schema([
+                                Forms\Components\TextInput::make('confirmed_start_time')
+                                    ->label('Start Time')
+                                    ->type('time')
+                                    ->disabled(fn ($record) => !in_array($record?->status, [PrivateTourRequest::STATUS_REQUESTED]))
+                                    ->required()
+                                    ->afterStateHydrated(function ($component, $state) {
+                                        // Display as HH:MM format
+                                        if ($state) {
+                                            $component->state(
+                                                $state instanceof \DateTimeInterface
+                                                    ? $state->format('H:i')
+                                                    : \Carbon\Carbon::createFromFormat('H:i:s', $state)->format('H:i')
+                                            );
+                                        }
+                                    })
+                                    ->dehydrateStateUsing(fn ($state) => $state ? $state . ':00' : null),
+                                Forms\Components\TextInput::make('confirmed_end_time')
+                                    ->label('End Time')
+                                    ->type('time')
+                                    ->disabled(fn ($record) => !in_array($record?->status, [PrivateTourRequest::STATUS_REQUESTED]))
+                                    ->required()
+                                    ->afterStateHydrated(function ($component, $state) {
+                                        if ($state) {
+                                            $component->state(
+                                                $state instanceof \DateTimeInterface
+                                                    ? $state->format('H:i')
+                                                    : \Carbon\Carbon::createFromFormat('H:i:s', $state)->format('H:i')
+                                            );
+                                        }
+                                    })
+                                    ->dehydrateStateUsing(fn ($state) => $state ? $state . ':00' : null),
+                            ]),
                         Forms\Components\TextInput::make('total_price_dollars')
                             ->label('Total Price ($)')
                             ->numeric()
@@ -153,36 +172,73 @@ class PrivateTourRequestResource extends Resource
                             ->disabled(fn ($record) => !in_array($record?->status, [PrivateTourRequest::STATUS_REQUESTED]))
                             ->required()
                             ->helperText('Set the flat total price for this private tour. Fees will be calculated automatically.')
-                            ->dehydrated(false),
+                            ->dehydrateStateUsing(fn ($state) => $state !== null ? (int) round($state * 100) : null)
+                            ->formatStateUsing(fn ($record) => $record?->total_price_cents ? $record->total_price_cents / 100 : null),
                         Forms\Components\Textarea::make('admin_notes')
                             ->label('Admin Notes')
-                            ->rows(3)
+                            ->rows(1)
                             ->maxLength(1000),
-                        Forms\Components\Repeater::make('guests')
-                            ->label('Guest Information')
-                            ->relationship('guests')
-                            ->schema([
-                                Forms\Components\TextInput::make('first_name')
-                                    ->required()
-                                    ->maxLength(100),
-                                Forms\Components\TextInput::make('last_name')
-                                    ->required()
-                                    ->maxLength(100),
-                                Forms\Components\TextInput::make('email')
-                                    ->email()
-                                    ->maxLength(255),
-                                Forms\Components\TextInput::make('phone')
-                                    ->maxLength(30),
-                                Forms\Components\Toggle::make('is_primary')
-                                    ->label('Primary Contact')
-                                    ->default(false),
-                            ])
-                            ->columns(3)
-                            ->addActionLabel('Add Guest')
-                            ->disabled(fn ($record) => !in_array($record?->status, [PrivateTourRequest::STATUS_REQUESTED]))
-                            ->required(),
                     ])
-                    ->columns(2),
+                    ->columns(1),
+
+                // Guest Information
+                Forms\Components\Section::make(fn ($record) => $record
+                    ? 'Guest Information  ' . static::getGuestBadgeHtml($record)
+                    : 'Guest Information'
+                )
+                ->schema([
+                    Forms\Components\Repeater::make('guests')
+                        ->label('')
+                        ->relationship('guests')
+                        ->default(function ($record) {
+                            // Prefill first guest from request contact info
+                            if ($record && $record->guests->isEmpty()) {
+                                return [[
+                                    'first_name' => $record->contact_first_name,
+                                    'last_name' => $record->contact_last_name,
+                                    'email' => $record->contact_email,
+                                    'phone' => $record->contact_phone,
+                                    'is_primary' => true,
+                                ]];
+                            }
+                            return null; // Use existing guest data
+                        })
+                        ->schema(function ($get, $livewire) {
+                            $schema = [
+                                Forms\Components\Grid::make(2)
+                                    ->schema([
+                                        Forms\Components\TextInput::make('first_name')
+                                            ->required()
+                                            ->maxLength(100),
+                                        Forms\Components\TextInput::make('last_name')
+                                            ->required()
+                                            ->maxLength(100),
+                                    ]),
+                            ];
+
+                            // First item (primary) gets email + phone row
+                            // Use a hidden field to detect primary
+                            $schema[] = Forms\Components\Toggle::make('is_primary')
+                                ->label('Primary Contact')
+                                ->default(false)
+                                ->hidden(); // Hidden but tracks state
+
+                            $schema[] = Forms\Components\TextInput::make('email')
+                                ->email()
+                                ->maxLength(255);
+
+                            $schema[] = Forms\Components\TextInput::make('phone')
+                                ->maxLength(30)
+                                ->visible(fn ($get) => $get('is_primary'))
+                                ->label('Phone (primary only)');
+
+                            return $schema;
+                        })
+                        ->addActionLabel('Add Guest')
+                        ->disabled(fn ($record) => !in_array($record?->status, [PrivateTourRequest::STATUS_REQUESTED]))
+                        ->reorderable(false)
+                        ->columnSpanFull(),
+                ]),
 
                 // Status display
                 Forms\Components\Section::make('Status')
@@ -225,10 +281,27 @@ class PrivateTourRequestResource extends Resource
             ]);
     }
 
+    /**
+     * Generate a badge showing completed guests / total expected.
+     * "Completed" = has first_name AND last_name.
+     */
+    private static function getGuestBadgeHtml(PrivateTourRequest $record): string
+    {
+        $guests = $record->guests;
+        $total = $record->totalGuests();
+        $completed = $guests->filter(fn ($g) => !empty($g->first_name) && !empty($g->last_name))->count();
+
+        $color = $completed >= $total ? '#d1fae5; color:#065f46'
+            : ($completed === 0 ? '#fee2e2; color:#991b1b'
+            : '#fef3c7; color:#92400e');
+
+        return "<span style=\"display:inline-block; padding:2px 10px; border-radius:9999px; font-size:12px; font-weight:600; background:{$color};\">{$completed} / {$total} guests</span>";
+    }
+
     public static function table(Table $table): Table
     {
         return $table
-            ->modifyQueryUsing(fn ($query) => $query->with(['preferredDates', 'confirmedTimeSlot.boat']))
+            ->modifyQueryUsing(fn ($query) => $query->with(['preferredDates', 'guests']))
             ->columns([
                 Tables\Columns\TextColumn::make('booking_ref')
                     ->searchable()
@@ -296,19 +369,17 @@ class PrivateTourRequestResource extends Resource
                             ->closeOnDateSelection()
                             ->minDate(today())
                             ->required(),
-                        Forms\Components\Select::make('confirmed_time_slot_id')
-                            ->label('Confirmed Time Slot')
-                            ->options(function () {
-                                return \App\Models\TimeSlot::with('boat')
-                                    ->get()
-                                    ->mapWithKeys(fn ($ts) => [
-                                        $ts->id => $ts->boat?->name . ' — ' .
-                                            \Carbon\Carbon::createFromFormat('H:i:s', $ts->start_time)->format('g:i A') . ' - ' .
-                                            \Carbon\Carbon::createFromFormat('H:i:s', $ts->end_time)->format('g:i A'),
-                                    ]);
-                            })
-                            ->searchable()
-                            ->required(),
+                        Forms\Components\Grid::make(2)
+                            ->schema([
+                                Forms\Components\TextInput::make('confirmed_start_time')
+                                    ->label('Start Time')
+                                    ->type('time')
+                                    ->required(),
+                                Forms\Components\TextInput::make('confirmed_end_time')
+                                    ->label('End Time')
+                                    ->type('time')
+                                    ->required(),
+                            ]),
                         Forms\Components\TextInput::make('total_price_dollars')
                             ->label('Total Price ($)')
                             ->numeric()
@@ -319,18 +390,39 @@ class PrivateTourRequestResource extends Resource
                             ->helperText('Flat total price. Fees calculated automatically.'),
                         Forms\Components\Textarea::make('admin_notes')
                             ->label('Admin Notes')
-                            ->rows(2)
+                            ->rows(1)
                             ->maxLength(1000),
                         Forms\Components\Repeater::make('guests')
                             ->label('Guest Information')
+                            ->default(function ($record) {
+                                if ($record && $record->guests->isEmpty()) {
+                                    return [[
+                                        'first_name' => $record->contact_first_name,
+                                        'last_name' => $record->contact_last_name,
+                                        'email' => $record->contact_email,
+                                        'phone' => $record->contact_phone,
+                                        'is_primary' => true,
+                                    ]];
+                                }
+                                return null;
+                            })
                             ->schema([
-                                Forms\Components\TextInput::make('first_name')->required()->maxLength(100),
-                                Forms\Components\TextInput::make('last_name')->required()->maxLength(100),
+                                Forms\Components\Grid::make(2)
+                                    ->schema([
+                                        Forms\Components\TextInput::make('first_name')->required()->maxLength(100),
+                                        Forms\Components\TextInput::make('last_name')->required()->maxLength(100),
+                                    ]),
                                 Forms\Components\TextInput::make('email')->email()->maxLength(255),
-                                Forms\Components\TextInput::make('phone')->maxLength(30),
-                                Forms\Components\Toggle::make('is_primary')->label('Primary Contact')->default(false),
+                                Forms\Components\TextInput::make('phone')
+                                    ->maxLength(30)
+                                    ->visible(fn ($get) => $get('is_primary'))
+                                    ->label('Phone (primary only)'),
+                                Forms\Components\Toggle::make('is_primary')
+                                    ->label('Primary Contact')
+                                    ->default(false)
+                                    ->hidden(),
                             ])
-                            ->columns(3)
+                            ->columnSpanFull()
                             ->addActionLabel('Add Guest')
                             ->required()
                             ->minItems(1),
@@ -343,7 +435,8 @@ class PrivateTourRequestResource extends Resource
                         $record->update([
                             'status' => PrivateTourRequest::STATUS_CONFIRMED,
                             'confirmed_tour_date' => $data['confirmed_tour_date'],
-                            'confirmed_time_slot_id' => $data['confirmed_time_slot_id'],
+                            'confirmed_start_time' => ($data['confirmed_start_time'] ?? null) ? $data['confirmed_start_time'] . ':00' : null,
+                            'confirmed_end_time' => ($data['confirmed_end_time'] ?? null) ? $data['confirmed_end_time'] . ':00' : null,
                             'total_price_cents' => $totalPriceCents,
                             'fees_cents' => $feeResult['total_fees_cents'],
                             'admin_notes' => $data['admin_notes'] ?? null,
@@ -355,13 +448,13 @@ class PrivateTourRequestResource extends Resource
                                 'first_name' => $guest['first_name'],
                                 'last_name' => $guest['last_name'],
                                 'email' => $guest['email'] ?? null,
-                                'phone' => $guest['phone'] ?? null,
+                                'phone' => ($guest['is_primary'] ?? false) ? ($guest['phone'] ?? null) : null,
                                 'is_primary' => $guest['is_primary'] ?? false,
                             ]);
                         }
 
                         try {
-                            app(EmailService::class)->sendPrivateTourConfirmed($record->fresh());
+                            app(EmailService::class)->sendPrivateTourConfirmed($record->fresh()->load('guests'));
                         } catch (\Exception $e) {
                             \Log::warning("Private tour confirm email error: " . $e->getMessage());
                         }

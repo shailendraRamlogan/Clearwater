@@ -21,7 +21,7 @@ class PrivateTourRequest extends Model
         'contact_first_name', 'contact_last_name', 'contact_email', 'contact_phone',
         'adult_count', 'child_count', 'infant_count',
         'has_occasion', 'occasion_details', 'admin_notes',
-        'confirmed_tour_date', 'confirmed_time_slot_id',
+        'confirmed_tour_date', 'confirmed_start_time', 'confirmed_end_time',
         'total_price_cents', 'fees_cents', 'stripe_intent_id',
     ];
 
@@ -30,6 +30,8 @@ class PrivateTourRequest extends Model
     protected $casts = [
         'has_occasion' => 'boolean',
         'confirmed_tour_date' => 'date',
+        'confirmed_start_time' => 'datetime:H:i',
+        'confirmed_end_time' => 'datetime:H:i',
     ];
 
     protected static function booted(): void
@@ -62,11 +64,6 @@ class PrivateTourRequest extends Model
         return $this->hasMany(PrivateTourGuest::class, 'private_tour_request_id');
     }
 
-    public function confirmedTimeSlot()
-    {
-        return $this->belongsTo(TimeSlot::class, 'confirmed_time_slot_id');
-    }
-
     public function booking()
     {
         return $this->hasOne(Booking::class, 'booking_ref', 'booking_ref');
@@ -80,6 +77,23 @@ class PrivateTourRequest extends Model
     public function getGrandTotalAttribute(): int
     {
         return ($this->total_price_cents ?? 0) + ($this->fees_cents ?? 0);
+    }
+
+    public function getFormattedTimeAttribute(): ?string
+    {
+        if (!$this->confirmed_start_time) return null;
+        $start = $this->confirmed_start_time instanceof \DateTimeInterface
+            ? $this->confirmed_start_time->format('g:i A')
+            : \Carbon\Carbon::createFromFormat('H:i:s', $this->confirmed_start_time)->format('g:i A');
+
+        if ($this->confirmed_end_time) {
+            $end = $this->confirmed_end_time instanceof \DateTimeInterface
+                ? $this->confirmed_end_time->format('g:i A')
+                : \Carbon\Carbon::createFromFormat('H:i:s', $this->confirmed_end_time)->format('g:i A');
+            return "{$start} – {$end}";
+        }
+
+        return $start;
     }
 
     public function getPaymentUrlAttribute(): ?string
