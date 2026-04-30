@@ -280,14 +280,26 @@ class PrivateTourRequestResource extends Resource
                     ->copyable(),
                 Tables\Columns\TextColumn::make('contact_name')
                     ->label('Contact')
-                    ->formatStateUsing(fn ($record) => "{$record->contact_first_name} {$record->contact_last_name}")
+                    ->formatStateUsing(fn ($record) => $record->contact_first_name . ' ' . $record->contact_last_name)
+                    ->description(fn ($record) => new \Illuminate\Support\HtmlString(
+                        '<span>' . e($record->contact_email) . '</span>' .
+                        ($record->contact_phone ? '<br><span style="color:#9ca3af;">' . e($record->contact_phone) . '</span>' : '')
+                    ))
                     ->searchable(query: fn ($query, $search) => $query->where('contact_first_name', 'like', "%{$search}%")->orWhere('contact_last_name', 'like', "%{$search}%")),
-                Tables\Columns\TextColumn::make('contact_email')
-                    ->searchable()
-                    ->toggleable(isToggledHiddenByDefault: true),
                 Tables\Columns\TextColumn::make('guest_summary')
                     ->label('Guests')
-                    ->formatStateUsing(fn ($record) => "{$record->adult_count}A / {$record->child_count}C / {$record->infant_count}I"),
+                    ->formatStateUsing(fn ($record) => "{$record->adult_count}A / {$record->child_count}C / {$record->infant_count}I")
+                    ->badge()
+                    ->color(fn ($record) => {
+                        $total = $record->adult_count + $record->child_count + $record->infant_count;
+                        $completed = $record->guests->filter(fn ($g) => !empty($g->first_name) && !empty($g->last_name))->count();
+                        return $completed >= $total ? 'success' : ($completed === 0 ? 'danger' : 'warning');
+                    })
+                    ->formatStateUsing(function ($record) {
+                        $total = $record->adult_count + $record->child_count + $record->infant_count;
+                        $completed = $record->guests->filter(fn ($g) => !empty($g->first_name) && !empty($g->last_name))->count();
+                        return "{$completed} / {$total}";
+                    }),
                 Tables\Columns\TextColumn::make('status')
                     ->badge()
                     ->color(fn ($state) => match ($state) {
