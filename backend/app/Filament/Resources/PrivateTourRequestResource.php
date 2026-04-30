@@ -288,7 +288,6 @@ class PrivateTourRequestResource extends Resource
                     ->searchable(query: fn ($query, $search) => $query->where('contact_first_name', 'like', "%{$search}%")->orWhere('contact_last_name', 'like', "%{$search}%")),
                 Tables\Columns\TextColumn::make('guest_summary')
                     ->label('Guests')
-                    ->formatStateUsing(fn ($record) => "{$record->adult_count}A / {$record->child_count}C / {$record->infant_count}I")
                     ->badge()
                     ->color(fn ($record) => {
                         $total = $record->adult_count + $record->child_count + $record->infant_count;
