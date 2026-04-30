@@ -182,27 +182,29 @@ class PrivateTourRequestResource extends Resource
                     ->columns(1),
 
                 // Guest Information
-                Forms\Components\Section::make(fn ($record) => $record
-                    ? 'Guest Information  ' . static::getGuestBadgeHtml($record)
-                    : 'Guest Information'
-                )
+                Forms\Components\Section::make('Guest Information')
+                ->heading(function ($record) {
+                    if (!$record) return 'Guest Information';
+                    $total = $record->adult_count + $record->child_count + $record->infant_count;
+                    $completed = $record->guests->filter(fn ($g) => !empty($g->first_name) && !empty($g->last_name))->count();
+                    $color = $completed >= $total ? '#065f46'
+                        : ($completed === 0 ? '#991b1b' : '#92400e');
+                    $bg = $completed >= $total ? '#d1fae5'
+                        : ($completed === 0 ? '#fee2e2' : '#fef3c7');
+                    // Use a ViewComponent or plain heading — Filament v3 escapes HTML in headings
+                    // So we use the description slot instead
+                    return 'Guest Information';
+                })
+                ->description(function ($record) {
+                    if (!$record) return null;
+                    $total = $record->adult_count + $record->child_count + $record->infant_count;
+                    $completed = $record->guests->filter(fn ($g) => !empty($g->first_name) && !empty($g->last_name))->count();
+                    return "{$completed} of {$total} guests completed";
+                })
                 ->schema([
                     Forms\Components\Repeater::make('guests')
                         ->label('')
                         ->relationship('guests')
-                        ->default(function ($record) {
-                            // Prefill first guest from request contact info
-                            if ($record && $record->guests->isEmpty()) {
-                                return [[
-                                    'first_name' => $record->contact_first_name,
-                                    'last_name' => $record->contact_last_name,
-                                    'email' => $record->contact_email,
-                                    'phone' => $record->contact_phone,
-                                    'is_primary' => true,
-                                ]];
-                            }
-                            return null;
-                        })
                         ->schema([
                             Forms\Components\Grid::make(2)
                                 ->schema([
@@ -269,23 +271,6 @@ class PrivateTourRequestResource extends Resource
                             ),
                     ]),
             ]);
-    }
-
-    /**
-     * Generate a badge showing completed guests / total expected.
-     * "Completed" = has first_name AND last_name.
-     */
-    private static function getGuestBadgeHtml(PrivateTourRequest $record): string
-    {
-        $guests = $record->guests;
-        $total = $record->adult_count + $record->child_count + $record->infant_count;
-        $completed = $guests->filter(fn ($g) => !empty($g->first_name) && !empty($g->last_name))->count();
-
-        $color = $completed >= $total ? '#d1fae5; color:#065f46'
-            : ($completed === 0 ? '#fee2e2; color:#991b1b'
-            : '#fef3c7; color:#92400e');
-
-        return "<span style=\"display:inline-block; padding:2px 10px; border-radius:9999px; font-size:12px; font-weight:600; background:{$color};\">{$completed} / {$total} guests</span>";
     }
 
     public static function table(Table $table): Table
