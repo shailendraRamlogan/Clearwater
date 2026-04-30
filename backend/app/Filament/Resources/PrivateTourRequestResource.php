@@ -137,16 +137,14 @@ class PrivateTourRequestResource extends Resource
                                     ->disabled(fn ($record) => !in_array($record?->status, [PrivateTourRequest::STATUS_REQUESTED]))
                                     ->required()
                                     ->afterStateHydrated(function ($component, $state) {
-                                        // Display as HH:MM format
                                         if ($state) {
-                                            $component->state(
-                                                $state instanceof \DateTimeInterface
-                                                    ? $state->format('H:i')
-                                                    : \Carbon\Carbon::createFromFormat('H:i:s', $state)->format('H:i')
-                                            );
+                                            $val = $state instanceof \DateTimeInterface
+                                                ? $state->format('H:i')
+                                                : substr((string) $state, 0, 5);
+                                            $component->state($val);
                                         }
                                     })
-                                    ->dehydrateStateUsing(fn ($state) => $state ? $state . ':00' : null),
+                                    ->dehydrateStateUsing(fn ($state) => $state ? substr($state, 0, 5) . ':00' : null),
                                 Forms\Components\TextInput::make('confirmed_end_time')
                                     ->label('End Time')
                                     ->type('time')
@@ -154,11 +152,10 @@ class PrivateTourRequestResource extends Resource
                                     ->required()
                                     ->afterStateHydrated(function ($component, $state) {
                                         if ($state) {
-                                            $component->state(
-                                                $state instanceof \DateTimeInterface
-                                                    ? $state->format('H:i')
-                                                    : \Carbon\Carbon::createFromFormat('H:i:s', $state)->format('H:i')
-                                            );
+                                            $val = $state instanceof \DateTimeInterface
+                                                ? $state->format('H:i')
+                                                : substr((string) $state, 0, 5);
+                                            $component->state($val);
                                         }
                                     })
                                     ->dehydrateStateUsing(fn ($state) => $state ? $state . ':00' : null),

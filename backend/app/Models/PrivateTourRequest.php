@@ -30,8 +30,6 @@ class PrivateTourRequest extends Model
     protected $casts = [
         'has_occasion' => 'boolean',
         'confirmed_tour_date' => 'date',
-        'confirmed_start_time' => 'datetime:H:i',
-        'confirmed_end_time' => 'datetime:H:i',
     ];
 
     protected static function booted(): void
@@ -82,18 +80,25 @@ class PrivateTourRequest extends Model
     public function getFormattedTimeAttribute(): ?string
     {
         if (!$this->confirmed_start_time) return null;
-        $start = $this->confirmed_start_time instanceof \DateTimeInterface
-            ? $this->confirmed_start_time->format('g:i A')
-            : \Carbon\Carbon::createFromFormat('H:i:s', $this->confirmed_start_time)->format('g:i A');
-
+        $start = $this->formatTimeField($this->confirmed_start_time);
         if ($this->confirmed_end_time) {
-            $end = $this->confirmed_end_time instanceof \DateTimeInterface
-                ? $this->confirmed_end_time->format('g:i A')
-                : \Carbon\Carbon::createFromFormat('H:i:s', $this->confirmed_end_time)->format('g:i A');
+            $end = $this->formatTimeField($this->confirmed_end_time);
             return "{$start} – {$end}";
         }
-
         return $start;
+    }
+
+    private function formatTimeField($value): string
+    {
+        if ($value instanceof \DateTimeInterface) {
+            return $value->format('g:i A');
+        }
+        // Handle both 'H:i' and 'H:i:s' string formats
+        try {
+            return \Carbon\Carbon::createFromFormat('H:i:s', $value)->format('g:i A');
+        } catch (\Exception $e) {
+            return \Carbon\Carbon::createFromFormat('H:i', $value)->format('g:i A');
+        }
     }
 
     public function getPaymentUrlAttribute(): ?string
