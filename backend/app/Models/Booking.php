@@ -27,7 +27,7 @@ class Booking extends Model
     public $incrementing = false;
 
     protected $fillable = [
-        'id', 'booking_ref', 'tour_date', 'time_slot_id', 'status',
+        'id', 'booking_ref', 'source_type', 'tour_date', 'time_slot_id', 'status',
         'photo_upgrade_count', 'special_occasion', 'special_comment',
         'total_price_cents', 'fees_cents', 'is_confirmed', 'needs_confirmation',
     ];

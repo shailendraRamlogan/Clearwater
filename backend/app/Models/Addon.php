@@ -11,7 +11,7 @@ class Addon extends Model
     public $incrementing = false;
 
     protected $fillable = [
-        "title", "description", "price_cents", "is_active", "sort_order",
+        "title", "description", "price_cents", "private_price_cents", "available_for", "is_active", "sort_order",
         "max_quantity", "icon_name",
     ];
 

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Booking;
 use App\Models\EmailLog;
+use App\Models\PrivateTourRequest;
 use App\Services\TicketService;
 use Resend\Laravel\Facades\Resend;
 
@@ -524,5 +525,288 @@ HTML;
                 'status' => 'failed',
             ]);
         }
+    }
+
+    // ─── Private Tour Emails ────────────────────────────────────────────────
+
+    public function sendPrivateTourRequestReceived(PrivateTourRequest $request): void
+    {
+        if (!config('services.resend.key')) {
+            return;
+        }
+
+        $firstName = $request->contact_first_name;
+        $datesHtml = $this->buildPreferredDatesHtml($request);
+        $guestCount = $request->totalGuests() . ' guest' . ($request->totalGuests() !== 1 ? 's' : '');
+        if ($request->infant_count > 0) {
+            $guestCount .= ' + ' . $request->infant_count . ' infant' . ($request->infant_count !== 1 ? 's' : '');
+        }
+
+        $occasionHtml = '';
+        if ($request->has_occasion && $request->occasion_details) {
+            $occasionHtml = "<tr><td style=\"padding:12px 32px;\"><p style=\"margin:0; font-size:14px; color:#374151;\"><strong>Special Occasion:</strong> " . e($request->occasion_details) . "</p></td></tr>";
+        }
+
+        $html = <<<HTML
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body style="margin:0; padding:0; background-color:#f9fafb; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f9fafb;">
+        <tr>
+            <td align="center" style="padding: 40px 16px;">
+                <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px; width:100%; background:#ffffff; border-radius:12px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+                    <tr>
+                        <td style="padding: 32px 32px 24px; text-align:center; background: linear-gradient(135deg, #0d9488, #0f766e);">
+                            <h1 style="margin:0; color:#ffffff; font-size:24px; font-weight:700;">Private Tour Request Received! ✨</h1>
+                            <p style="margin:8px 0 0; color:#ccfbf1; font-size:15px;">Thank you, {$firstName}! We'll be in touch soon.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:24px 32px 0; text-align:center;">
+                            <span style="display:inline-block; background:#f0fdfa; color:#0d9488; font-size:13px; font-weight:600; padding:6px 16px; border-radius:9999px; letter-spacing:0.5px;">
+                                REF: {$request->booking_ref}
+                            </span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:20px 32px;">
+                            <p style="margin:0 0 16px; font-size:15px; color:#374151; line-height:1.6;">
+                                We've received your private tour request! Our team will review your preferred dates and get back to you within <strong>24–48 hours</strong> with a personalized quote.
+                            </p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:0 32px;">
+                            <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb; border-radius:8px; overflow:hidden;">
+                                <tr style="background:#f9fafb;">
+                                    <th style="padding:10px 14px; text-align:left; font-size:12px; font-weight:600; color:#6b7280; text-transform:uppercase; letter-spacing:0.5px;" colspan="2">Request Summary</th>
+                                </tr>
+                                <tr><td style="padding:10px 14px; border-bottom:1px solid #f3f4f6; color:#6b7280; font-size:14px;">Guests</td><td style="padding:10px 14px; border-bottom:1px solid #f3f4f6; text-align:right; font-size:14px; font-weight:600;">{$guestCount}</td></tr>
+                                {$datesHtml}
+                            </table>
+                        </td>
+                    </tr>
+                    {$occasionHtml}
+                    <tr>
+                        <td style="padding:24px 32px; background:#f9fafb; text-align:center;">
+                            <p style="margin:0; font-size:13px; color:#6b7280;">Clear Boat Bahamas<br><span style="font-size:12px; color:#9ca3af;">Need help? Reply to this email or contact us directly.</span></p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+HTML;
+
+        $this->sendPrivateTourEmail($request, "Private Tour Request Received — {$request->booking_ref}", $html, 'private_tour_request_received');
+    }
+
+    public function sendPrivateTourConfirmed(PrivateTourRequest $request): void
+    {
+        if (!config('services.resend.key')) {
+            return;
+        }
+
+        $firstName = $request->contact_first_name;
+        $totalPrice = '$' . number_format($request->total_price_cents / 100, 2);
+        $fees = '$' . number_format(($request->fees_cents ?? 0) / 100, 2);
+        $grandTotal = '$' . number_format($request->grand_total / 100, 2);
+        $date = $request->confirmed_tour_date ? \Illuminate\Support\Carbon::parse($request->confirmed_tour_date)->format('l, F j, Y') : 'TBD';
+        $time = 'TBD';
+        if ($request->confirmedTimeSlot) {
+            $time = \Carbon\Carbon::createFromFormat('H:i:s', $request->confirmedTimeSlot->start_time)->format('g:i A') . ' - ' . \Carbon\Carbon::createFromFormat('H:i:s', $request->confirmedTimeSlot->end_time)->format('g:i A');
+        }
+
+        $paymentUrl = $request->payment_url;
+        $ctaHtml = '';
+        if ($paymentUrl) {
+            $ctaHtml = "<tr><td style=\"padding:24px 32px; text-align:center;\"><a href=\"{$paymentUrl}\" style=\"display:inline-block; background-color:#0d9488; color:#ffffff; padding:14px 40px; border-radius:8px; text-decoration:none; font-weight:600; font-size:16px;\">Pay Now — {$grandTotal}</a><p style=\"margin:12px 0 0; font-size:13px; color:#9ca3af;\">Click to complete your payment and secure your private tour.</p></td></tr>";
+        }
+
+        $html = <<<HTML
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body style="margin:0; padding:0; background-color:#f9fafb; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f9fafb;">
+        <tr>
+            <td align="center" style="padding: 40px 16px;">
+                <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px; width:100%; background:#ffffff; border-radius:12px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+                    <tr>
+                        <td style="padding: 32px 32px 24px; text-align:center; background: linear-gradient(135deg, #0d9488, #0f766e);">
+                            <h1 style="margin:0; color:#ffffff; font-size:24px; font-weight:700;">Your Private Tour Quote is Ready! 🎉</h1>
+                            <p style="margin:8px 0 0; color:#ccfbf1; font-size:15px;">Great news, {$firstName}! Your tour has been confirmed.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:24px 32px 0; text-align:center;">
+                            <span style="display:inline-block; background:#f0fdfa; color:#0d9488; font-size:13px; font-weight:600; padding:6px 16px; border-radius:9999px; letter-spacing:0.5px;">
+                                REF: {$request->booking_ref}
+                            </span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:20px 32px 0;">
+                            <table width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td style="padding:10px 14px; background:#f9fafb; border-radius:8px; width:50%;">
+                                        <p style="margin:0; font-size:12px; color:#6b7280;">Confirmed Date</p>
+                                        <p style="margin:4px 0 0; font-size:15px; font-weight:600; color:#111827;">{$date}</p>
+                                    </td>
+                                    <td style="width:8px;"></td>
+                                    <td style="padding:10px 14px; background:#f9fafb; border-radius:8px; width:50%;">
+                                        <p style="margin:0; font-size:12px; color:#6b7280;">Time</p>
+                                        <p style="margin:4px 0 0; font-size:15px; font-weight:600; color:#111827;">{$time}</p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:24px 32px 0;">
+                            <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb; border-radius:8px; overflow:hidden;">
+                                <tr style="background:#f9fafb;"><th style="padding:10px 14px; text-align:left; font-size:12px; font-weight:600; color:#6b7280; text-transform:uppercase;">Pricing</th><th style="padding:10px 14px; text-align:right; font-size:12px; font-weight:600; color:#6b7280; text-transform:uppercase;">Amount</th></tr>
+                                <tr><td style="padding:10px 14px; border-bottom:1px solid #f3f4f6; font-size:14px;">Tour Price</td><td style="padding:10px 14px; border-bottom:1px solid #f3f4f6; text-align:right; font-size:14px;">{$totalPrice}</td></tr>
+                                <tr><td style="padding:10px 14px; border-bottom:1px solid #f3f4f6; font-size:14px;">Fees</td><td style="padding:10px 14px; border-bottom:1px solid #f3f4f6; text-align:right; font-size:14px;">{$fees}</td></tr>
+                                <tr><td style="padding:10px 14px; font-size:16px; font-weight:700; color:#0d9488;">Total</td><td style="padding:10px 14px; text-align:right; font-size:16px; font-weight:700; color:#0d9488;">{$grandTotal}</td></tr>
+                            </table>
+                        </td>
+                    </tr>
+                    {$ctaHtml}
+                    <tr>
+                        <td style="padding:24px 32px; background:#f9fafb; text-align:center;">
+                            <p style="margin:0; font-size:13px; color:#6b7280;">Clear Boat Bahamas<br><span style=\"font-size:12px; color:#9ca3af;\">Need help? Reply to this email or contact us directly.</span></p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+HTML;
+
+        $this->sendPrivateTourEmail($request, "Your Private Tour Quote — {$request->booking_ref}", $html, 'private_tour_confirmed');
+    }
+
+    public function sendPrivateTourRejected(PrivateTourRequest $request): void
+    {
+        if (!config('services.resend.key')) {
+            return;
+        }
+
+        $firstName = $request->contact_first_name;
+        $reason = e($request->admin_notes ?? 'Unfortunately, we are unable to accommodate your request at this time.');
+
+        $html = <<<HTML
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body style="margin:0; padding:0; background-color:#f9fafb; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f9fafb;">
+        <tr>
+            <td align="center" style="padding: 40px 16px;">
+                <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px; width:100%; background:#ffffff; border-radius:12px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+                    <tr>
+                        <td style="padding: 32px 32px 24px; text-align:center; background: linear-gradient(135deg, #dc2626, #b91c1c);">
+                            <h1 style="margin:0; color:#ffffff; font-size:24px; font-weight:700;">Private Tour Request Update</h1>
+                            <p style="margin:8px 0 0; color:#fecaca; font-size:15px;">{$request->booking_ref}</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:24px 32px;">
+                            <p style="margin:0 0 16px; font-size:15px; color:#374151; line-height:1.6;">
+                                Hi {$firstName},
+                            </p>
+                            <p style="margin:0 0 16px; font-size:15px; color:#374151; line-height:1.6;">
+                                Thank you for your interest in a private tour with Clear Boat Bahamas. Unfortunately, we're unable to accommodate your request at this time.
+                            </p>
+                            <div style="background:#fef2f2; border:1px solid #fecaca; border-radius:8px; padding:16px; margin-bottom:16px;">
+                                <p style="margin:0; font-size:14px; color:#991b1b;"><strong>Reason:</strong> {$reason}</p>
+                            </div>
+                            <p style="margin:0; font-size:15px; color:#374151; line-height:1.6;">
+                                We'd love to help you plan an amazing tour — feel free to submit a new request with different dates or group size.
+                            </p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:24px 32px; background:#f9fafb; text-align:center;">
+                            <p style="margin:0; font-size:13px; color:#6b7280;">Clear Boat Bahamas</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+HTML;
+
+        $this->sendPrivateTourEmail($request, "Private Tour Request Update — {$request->booking_ref}", $html, 'private_tour_rejected');
+    }
+
+    public function sendPrivateTourPaymentSucceeded(PrivateTourRequest $request): void
+    {
+        $booking = $request->booking;
+        if (!$booking) {
+            return;
+        }
+
+        // Reuse the standard confirmation email
+        $this->sendConfirmation($booking);
+    }
+
+    // ─── Private Tour Helpers ────────────────────────────────────────────────
+
+    private function sendPrivateTourEmail(PrivateTourRequest $request, string $subject, string $html, string $template): void
+    {
+        try {
+            $result = Resend::emails()->send([
+                'from' => 'Clear Boat Bahamas <bookings@mail.clearboatbahamas.com>',
+                'to' => [$request->contact_email],
+                'subject' => $subject,
+                'html' => $html,
+            ]);
+
+            EmailLog::create([
+                'booking_id' => $request->booking?->id,
+                'recipient' => $request->contact_email,
+                'subject' => $subject,
+                'template' => $template,
+                'resend_id' => $result->id ?? null,
+                'status' => 'sent',
+            ]);
+        } catch (\Exception $e) {
+            EmailLog::create([
+                'booking_id' => $request->booking?->id,
+                'recipient' => $request->contact_email,
+                'subject' => $subject,
+                'template' => $template,
+                'status' => 'failed',
+            ]);
+        }
+    }
+
+    private function buildPreferredDatesHtml(PrivateTourRequest $request): string
+    {
+        $html = '';
+        foreach ($request->preferredDates as $i => $pd) {
+            $dateFormatted = \Illuminate\Support\Carbon::parse($pd->date)->format('F j, Y');
+            $preference = ucfirst($pd->time_preference);
+            $html .= "<tr><td style=\"padding:10px 14px; border-bottom:1px solid #f3f4f6; font-size:14px;\">" . ($i + 1) . ". {$dateFormatted}</td><td style=\"padding:10px 14px; border-bottom:1px solid #f3f4f6; text-align:right; font-size:14px; font-weight:500; color:#0d9488;\">{$preference}</td></tr>";
+        }
+        return $html;
     }
 }

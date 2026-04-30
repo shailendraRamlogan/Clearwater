@@ -117,6 +117,11 @@ class BookingResource extends Resource
         return $table
             ->modifyQueryUsing(fn ($query) => $query->with(['guests', 'items']))
             ->columns([
+                Tables\Columns\TextColumn::make('source_type')
+                    ->label('Type')
+                    ->badge()
+                    ->color(fn ($state) => $state === 'private' ? 'warning' : 'gray')
+                    ->formatStateUsing(fn ($state) => $state === 'private' ? 'Private Tour' : 'Regular'),
                 Tables\Columns\TextColumn::make('booking_ref')->searchable(),
                 Tables\Columns\TextColumn::make('tour_date')->date(),
                 Tables\Columns\TextColumn::make('timeSlot.boat.name')->label('Boat'),
@@ -150,6 +155,12 @@ class BookingResource extends Resource
                     ->formatStateUsing(fn ($record) => '$' . number_format(($record->total_price_cents ?? 0) / 100, 2)),
             ])
             ->filters([
+                Tables\Filters\SelectFilter::make('source_type')
+                    ->label('Booking Type')
+                    ->options([
+                        'regular' => 'Regular',
+                        'private' => 'Private Tour',
+                    ]),
                 Tables\Filters\Filter::make("tour_date_range")
                     ->label("Tour Date")
                     ->form([

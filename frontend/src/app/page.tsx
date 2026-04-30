@@ -11,6 +11,7 @@ import {
   Clock,
   Users,
   ChevronRight,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -224,6 +225,30 @@ export default function HomePage() {
                 <p className="text-ocean-500 text-sm">{item.desc}</p>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Private Tour CTA */}
+      <section className="py-12 sm:py-16 bg-gradient-to-r from-ocean-50 to-white border-t border-ocean-100">
+        <div className="section-container text-center">
+          <div className="max-w-2xl mx-auto">
+            <div className="inline-flex items-center gap-2 bg-ocean-100 text-ocean-700 px-4 py-2 rounded-full text-sm font-medium mb-4">
+              <Sparkles className="h-4 w-4" />
+              Private Experience
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-bold text-ocean-900 mb-3">
+              Want the Boat All to Yourself?
+            </h2>
+            <p className="text-ocean-500 mb-6 max-w-lg mx-auto">
+              Book a private tour for up to 10 guests. Perfect for birthdays, anniversaries, corporate events, or just a special day on the water.
+            </p>
+            <Link href="/book/private-tour">
+              <Button variant="cta" size="xl">
+                Book a Private Tour
+                <ChevronRight className="ml-2 h-5 w-5" />
+              </Button>
+            </Link>
           </div>
         </div>
       </section>
