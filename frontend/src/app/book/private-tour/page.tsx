@@ -124,7 +124,6 @@ function PrivateTourForm() {
     } catch (err: unknown) {
       const error = err as { response?: { data?: { message?: string; errors?: Record<string, string> } } };
       const msg =
-      const msg =
         error.response?.data?.message ||
         Object.values(error.response?.data?.errors || {})[0] ||
         "Something went wrong. Please try again.";
