@@ -289,16 +289,18 @@ class PrivateTourRequestResource extends Resource
                 Tables\Columns\TextColumn::make('guest_summary')
                     ->label('Guests')
                     ->badge()
-                    ->color(fn ($record) => {
-                        $total = $record->adult_count + $record->child_count + $record->infant_count;
-                        $completed = $record->guests->filter(fn ($g) => !empty($g->first_name) && !empty($g->last_name))->count();
-                        return $completed >= $total ? 'success' : ($completed === 0 ? 'danger' : 'warning');
-                    })
-                    ->formatStateUsing(function ($record) {
-                        $total = $record->adult_count + $record->child_count + $record->infant_count;
-                        $completed = $record->guests->filter(fn ($g) => !empty($g->first_name) && !empty($g->last_name))->count();
-                        return "{$completed} / {$total}";
-                    }),
+                    ->color(fn ($record) => (
+                        $record->guests->filter(fn ($g) => !empty($g->first_name) && !empty($g->last_name))->count()
+                        >= ($record->adult_count + $record->child_count + $record->infant_count)
+                    ) ? 'success' : (
+                        $record->guests->filter(fn ($g) => !empty($g->first_name) && !empty($g->last_name))->count() === 0
+                        ? 'danger' : 'warning'
+                    ))
+                    ->formatStateUsing(fn ($record) => (
+                        $record->guests->filter(fn ($g) => !empty($g->first_name) && !empty($g->last_name))->count()
+                        . ' / '
+                        . ($record->adult_count + $record->child_count + $record->infant_count)
+                    )),
                 Tables\Columns\TextColumn::make('status')
                     ->badge()
                     ->color(fn ($state) => match ($state) {
