@@ -224,7 +224,9 @@ class PrivateTourRequestResource extends Resource
                                         ->maxLength(30)
                                         ->label('Phone'),
                                 ]),
-                            Forms\Components\Hidden::make('is_primary'),
+                            Forms\Components\Checkbox::make('is_primary')
+                                ->label('Primary Contact')
+                                ->default(false),
                         ])
                         ->addActionLabel('Add Guest')
                         ->disabled(fn ($record) => !in_array($record?->status, [PrivateTourRequest::STATUS_REQUESTED]))
@@ -399,7 +401,9 @@ class PrivateTourRequestResource extends Resource
                                         Forms\Components\TextInput::make('email')->email()->maxLength(255),
                                         Forms\Components\TextInput::make('phone')->maxLength(30)->label('Phone'),
                                     ]),
-                                Forms\Components\Hidden::make('is_primary'),
+                                Forms\Components\Checkbox::make('is_primary')
+                                    ->label('Primary Contact')
+                                    ->default(false),
                             ])
                             ->columnSpanFull()
                             ->addActionLabel('Add Guest')
