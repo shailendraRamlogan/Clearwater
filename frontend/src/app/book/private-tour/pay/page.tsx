@@ -6,7 +6,7 @@ import { loadStripe } from "@stripe/stripe-js";
 import { CardElement, useStripe, useElements, Elements } from "@stripe/react-stripe-js";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { lookupPrivateTour, initiatePrivateTourPayment, confirmPrivateTourPayment } from "@/lib/private-tour-service";
+import { getPrivateTourByRef, initiatePrivateTourPayment, confirmPrivateTourPayment } from "@/lib/private-tour-service";
 import { formatCurrency } from "@/lib/utils";
 import type { PrivateTourRequest } from "@/types/booking";
 import {
@@ -40,7 +40,7 @@ function PaymentFormInner() {
       toast.error("No booking reference provided.");
       return;
     }
-    lookupPrivateTour(ref)
+    getPrivateTourByRef(ref)
       .then(({ request: req }) => {
         if (req.status !== "confirmed") {
           toast.error("This request is not ready for payment.");
