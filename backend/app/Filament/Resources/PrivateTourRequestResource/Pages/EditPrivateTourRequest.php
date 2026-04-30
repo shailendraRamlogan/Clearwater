@@ -21,18 +21,19 @@ class EditPrivateTourRequest extends EditRecord
     protected function mutateFormDataBeforeFill(array $data): array
     {
         $record = $this->getRecord();
+        $record->load('guests');
 
-        // If no guests exist yet, prefill first guest from contact info
+        // If no guests exist yet, create the primary guest from contact info
+        // so the relationship repeater picks it up
         if ($record->guests->isEmpty()) {
-            $data['guests'] = [
-                [
-                    'first_name' => $record->contact_first_name,
-                    'last_name' => $record->contact_last_name,
-                    'email' => $record->contact_email,
-                    'phone' => $record->contact_phone,
-                    'is_primary' => true,
-                ],
-            ];
+            $record->guests()->create([
+                'first_name' => $record->contact_first_name,
+                'last_name' => $record->contact_last_name,
+                'email' => $record->contact_email,
+                'phone' => $record->contact_phone,
+                'is_primary' => true,
+            ]);
+            $record->refresh();
         }
 
         return $data;

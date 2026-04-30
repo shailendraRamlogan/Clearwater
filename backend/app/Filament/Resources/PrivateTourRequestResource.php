@@ -370,7 +370,8 @@ class PrivateTourRequestResource extends Resource
                         Forms\Components\Repeater::make('guests')
                             ->label('Guest Information')
                             ->default(function ($record) {
-                                if ($record && $record->guests->isEmpty()) {
+                                if (!$record) return [];
+                                if ($record->guests->isEmpty()) {
                                     return [[
                                         'first_name' => $record->contact_first_name,
                                         'last_name' => $record->contact_last_name,
@@ -379,7 +380,13 @@ class PrivateTourRequestResource extends Resource
                                         'is_primary' => true,
                                     ]];
                                 }
-                                return null;
+                                return $record->guests->map(fn ($g) => [
+                                    'first_name' => $g->first_name,
+                                    'last_name' => $g->last_name,
+                                    'email' => $g->email,
+                                    'phone' => $g->phone,
+                                    'is_primary' => $g->is_primary,
+                                ])->toArray();
                             })
                             ->schema([
                                 Forms\Components\Grid::make(2)
