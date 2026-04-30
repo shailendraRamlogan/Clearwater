@@ -180,25 +180,23 @@ class PrivateTourRequestResource extends Resource
 
                 // Guest Information
                 Forms\Components\Section::make('Guest Information')
-                ->heading(function ($record) {
-                    if (!$record) return 'Guest Information';
-                    $total = $record->adult_count + $record->child_count + $record->infant_count;
-                    $completed = $record->guests->filter(fn ($g) => !empty($g->first_name) && !empty($g->last_name))->count();
-                    $color = $completed >= $total ? '#065f46'
-                        : ($completed === 0 ? '#991b1b' : '#92400e');
-                    $bg = $completed >= $total ? '#d1fae5'
-                        : ($completed === 0 ? '#fee2e2' : '#fef3c7');
-                    // Use a ViewComponent or plain heading — Filament v3 escapes HTML in headings
-                    // So we use the description slot instead
-                    return 'Guest Information';
-                })
-                ->description(function ($record) {
-                    if (!$record) return null;
-                    $total = $record->adult_count + $record->child_count + $record->infant_count;
-                    $completed = $record->guests->filter(fn ($g) => !empty($g->first_name) && !empty($g->last_name))->count();
-                    return "{$completed} of {$total} guests completed";
-                })
                 ->schema([
+                    Forms\Components\Placeholder::make('guest_counter')
+                        ->label('')
+                        ->content(function ($get, $livewire, $record) {
+                            if (!$record) return null;
+                            $total = $record->adult_count + $record->child_count + $record->infant_count;
+                            $guests = $get('guests') ?? [];
+                            $completed = collect($guests)->filter(fn ($g) => !empty($g['first_name']) && !empty($g['last_name']))->count();
+                            $color = $completed >= $total ? '#065f46'
+                                : ($completed === 0 ? '#991b1b' : '#92400e');
+                            $bg = $completed >= $total ? '#d1fae5'
+                                : ($completed === 0 ? '#fee2e2' : '#fef3c7');
+                            return new \Illuminate\Support\HtmlString(
+                                "<span style=\"display:inline-block; padding:4px 12px; border-radius:9999px; font-size:13px; font-weight:600; background:{$bg}; color:{$color};\">{$completed} / {$total} guests completed</span>"
+                            );
+                        })
+                        ->reactive(),
                     Forms\Components\Repeater::make('guests')
                         ->label('')
                         ->relationship('guests')
