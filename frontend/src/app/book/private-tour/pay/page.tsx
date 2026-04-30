@@ -74,9 +74,10 @@ function PaymentForm({ tour }: { tour: PrivateTourRequest }) {
         setSuccess(true);
         toast.success("Payment successful! Your tour is booked.");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { message?: string } } };
       const msg =
-        err.response?.data?.message || "Payment failed. Please try again.";
+        error.response?.data?.message || "Payment failed. Please try again.";
       setError(msg);
       toast.error(msg);
     } finally {

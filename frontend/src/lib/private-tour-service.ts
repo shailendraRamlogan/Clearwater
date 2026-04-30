@@ -1,7 +1,6 @@
 import { api } from "./api";
 import type {
   PrivateTourRequest,
-  PrivateTourPreferredDate,
 } from "@/types/booking";
 
 interface CreatePrivateTourPayload {

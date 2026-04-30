@@ -25,7 +25,7 @@ import "react-phone-input-2/lib/style.css";
 import PhoneInput from "react-phone-input-2";
 import { usePrivateTourStore } from "@/stores/private-tour-store";
 import { createPrivateTourRequest } from "@/lib/private-tour-service";
-import { formatDate } from "@/lib/utils";
+// formatDate not needed here — dates formatted inline
 import { toast } from "sonner";
 import Link from "next/link";
 
@@ -121,10 +121,12 @@ function PrivateTourForm() {
       });
       store.setSubmittedRef(result.booking_ref);
       toast.success("Request submitted! We'll be in touch soon.");
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { message?: string; errors?: Record<string, string> } } };
       const msg =
-        err.response?.data?.message ||
-        Object.values(err.response?.data?.errors || {})[0] ||
+      const msg =
+        error.response?.data?.message ||
+        Object.values(error.response?.data?.errors || {})[0] ||
         "Something went wrong. Please try again.";
       store.setError(msg);
       toast.error(msg);
@@ -200,7 +202,7 @@ function PrivateTourForm() {
 
         {/* Step Indicator */}
         <div className="flex items-center justify-center gap-1 sm:gap-2 mb-10 max-w-2xl mx-auto">
-          {stepIcons.map((Icon, i) => (
+          {stepIcons.map((Icon, idx) => (
             <div key={i} className="flex items-center">
               <div className="flex flex-col items-center">
                 <div
@@ -240,10 +242,10 @@ function PrivateTourForm() {
                   {stepLabels[i]}
                 </span>
               </div>
-              {i < stepIcons.length - 1 && (
+              {idx < stepIcons.length - 1 && (
                 <div
                   className={`w-8 sm:w-16 h-0.5 mx-1 rounded transition-colors ${
-                    i < store.currentStep ? "bg-ocean-700" : "bg-ocean-200"
+                    idx < store.currentStep ? "bg-ocean-700" : "bg-ocean-200"
                   }`}
                 />
               )}
