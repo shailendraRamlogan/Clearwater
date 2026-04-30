@@ -160,7 +160,7 @@ class PrivateTourRequestResource extends Resource
                                     })
                                     ->dehydrateStateUsing(fn ($state) => $state ? $state . ':00' : null),
                             ]),
-                        Forms\Components\TextInput::make('total_price_dollars')
+                        Forms\Components\TextInput::make('total_price_cents')
                             ->label('Total Price ($)')
                             ->numeric()
                             ->minValue(0)
@@ -169,8 +169,8 @@ class PrivateTourRequestResource extends Resource
                             ->disabled(fn ($record) => !in_array($record?->status, [PrivateTourRequest::STATUS_REQUESTED]))
                             ->required()
                             ->helperText('Set the flat total price for this private tour. Fees will be calculated automatically.')
-                            ->dehydrateStateUsing(fn ($state) => $state !== null ? (int) round($state * 100) : null)
-                            ->formatStateUsing(fn ($record) => $record?->total_price_cents ? $record->total_price_cents / 100 : null),
+                            ->formatStateUsing(fn ($record) => $record?->total_price_cents ? $record->total_price_cents / 100 : null)
+                            ->dehydrateStateUsing(fn ($state) => $state !== null ? (int) round((float) $state * 100) : null),
                         Forms\Components\Textarea::make('admin_notes')
                             ->label('Admin Notes')
                             ->rows(1)
