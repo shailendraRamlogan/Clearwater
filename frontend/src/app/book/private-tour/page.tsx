@@ -206,14 +206,14 @@ function PrivateTourForm() {
               <div className="flex flex-col items-center">
                 <div
                   className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center transition-colors ${
-                    i < store.currentStep
+                    idx < store.currentStep
                       ? "bg-ocean-700 text-white"
-                      : i === store.currentStep
+                      : idx === store.currentStep
                         ? "bg-ocean-700 text-white ring-4 ring-ocean-100"
                         : "bg-ocean-100 text-ocean-400"
                   }`}
                 >
-                  {i < store.currentStep ? (
+                  {idx < store.currentStep ? (
                     <svg
                       className="w-5 h-5"
                       fill="none"
@@ -233,12 +233,12 @@ function PrivateTourForm() {
                 </div>
                 <span
                   className={`text-xs mt-1.5 font-medium hidden sm:block ${
-                    i <= store.currentStep
+                    idx <= store.currentStep
                       ? "text-ocean-700"
                       : "text-ocean-300"
                   }`}
                 >
-                  {stepLabels[i]}
+                  {stepLabels[idx]}
                 </span>
               </div>
               {idx < stepIcons.length - 1 && (
