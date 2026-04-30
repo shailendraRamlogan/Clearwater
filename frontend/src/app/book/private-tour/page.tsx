@@ -202,7 +202,7 @@ function PrivateTourForm() {
         {/* Step Indicator */}
         <div className="flex items-center justify-center gap-1 sm:gap-2 mb-10 max-w-2xl mx-auto">
           {stepIcons.map((Icon, idx) => (
-            <div key={i} className="flex items-center">
+            <div key={idx} className="flex items-center">
               <div className="flex flex-col items-center">
                 <div
                   className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center transition-colors ${
