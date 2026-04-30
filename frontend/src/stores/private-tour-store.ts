@@ -1,116 +1,137 @@
 import { create } from "zustand";
+import type { PrivateTourPreferredDate } from "@/types/booking";
 
-interface PrivateTourStore {
-  // Contact Info
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone: string;
-
-  // Guest Counts
+interface PrivateTourState {
+  // Step 1: Party size
   adultCount: number;
+  setAdultCount: (count: number) => void;
   childCount: number;
+  setChildCount: (count: number) => void;
   infantCount: number;
+  setInfantCount: (count: number) => void;
 
-  // Preferred Dates
-  preferredDates: { date: string; time_preference: "morning" | "afternoon" }[];
+  // Step 2: Preferred dates (up to 5)
+  preferredDates: PrivateTourPreferredDate[];
+  addPreferredDate: (date: string, time: "morning" | "afternoon") => void;
+  removePreferredDate: (index: number) => void;
+  clearPreferredDates: () => void;
 
-  // Occasion
+  // Step 3: Occasion
   hasOccasion: boolean;
+  setHasOccasion: (val: boolean) => void;
   occasionDetails: string;
+  setOccasionDetails: (text: string) => void;
 
-  // UI State
+  // Step 4: Contact info
+  contactFirstName: string;
+  setContactFirstName: (val: string) => void;
+  contactLastName: string;
+  setContactLastName: (val: string) => void;
+  contactEmail: string;
+  setContactEmail: (val: string) => void;
+  contactPhone: string;
+  setContactPhone: (val: string) => void;
+
+  // Navigation
   currentStep: number;
-  isSubmitting: boolean;
-  submittedRef: string | null;
-  error: string | null;
+  setCurrentStep: (step: number) => void;
+  nextStep: () => void;
+  prevStep: () => void;
 
-  // Actions
-  setContact: (
-    firstName: string,
-    lastName: string,
-    email: string,
-    phone: string
-  ) => void;
-  setGuestCounts: (adults: number, children: number, infants: number) => void;
-  addPreferredDate: (
-    date: string,
-    preference: "morning" | "afternoon"
-  ) => boolean;
-  removePreferredDate: (date: string) => void;
-  updateTimePreference: (
-    date: string,
-    preference: "morning" | "afternoon"
-  ) => void;
-  setOccasion: (hasOccasion: boolean, details: string) => void;
-  setStep: (step: number) => void;
-  setSubmitting: (v: boolean) => void;
+  // Submission state
+  isSubmitting: boolean;
+  setIsSubmitting: (val: boolean) => void;
+  submittedRef: string | null;
   setSubmittedRef: (ref: string | null) => void;
-  setError: (err: string | null) => void;
+
+  // Computed
+  totalPeople: () => number;
+  canSubmit: () => boolean;
+
+  // Reset
   reset: () => void;
 }
 
 const initialState = {
-  firstName: "",
-  lastName: "",
-  email: "",
-  phone: "",
-  adultCount: 0,
+  adultCount: 1,
   childCount: 0,
   infantCount: 0,
-  preferredDates: [] as { date: string; time_preference: "morning" | "afternoon" }[],
+  preferredDates: [] as PrivateTourPreferredDate[],
   hasOccasion: false,
   occasionDetails: "",
-  currentStep: 0,
+  contactFirstName: "",
+  contactLastName: "",
+  contactEmail: "",
+  contactPhone: "",
+  currentStep: 1,
   isSubmitting: false,
   submittedRef: null,
-  error: null,
 };
 
-export const usePrivateTourStore = create<PrivateTourStore>((set, get) => ({
+export const usePrivateTourStore = create<PrivateTourState>((set, get) => ({
   ...initialState,
 
-  setContact: (firstName, lastName, email, phone) =>
-    set({ firstName, lastName, email, phone }),
+  setAdultCount: (count) => {
+    const people = count + get().childCount;
+    if (people > 10) return;
+    set({ adultCount: Math.max(0, count) });
+  },
+  setChildCount: (count) => {
+    const people = get().adultCount + count;
+    if (people > 10) return;
+    set({ childCount: Math.max(0, count) });
+  },
+  setInfantCount: (count) => set({ infantCount: Math.max(0, count) }),
 
-  setGuestCounts: (adults, children, infants) =>
-    set({ adultCount: adults, childCount: children, infantCount: infants }),
-
-  addPreferredDate: (date, preference) => {
-    const { preferredDates } = get();
-    if (preferredDates.length >= 5) return false;
-    if (preferredDates.some((d) => d.date === date)) return false;
+  addPreferredDate: (date, time) => {
+    const dates = get().preferredDates;
+    if (dates.length >= 5) return;
+    // Prevent exact duplicates
+    if (dates.some((d) => d.date === date && d.time_preference === time)) return;
     set({
       preferredDates: [
-        ...preferredDates,
-        { date, time_preference: preference },
+        ...dates,
+        { date, time_preference: time, sort_order: dates.length },
       ],
     });
-    return true;
   },
-
-  removePreferredDate: (date) =>
+  removePreferredDate: (index) =>
     set((state) => ({
-      preferredDates: state.preferredDates.filter((d) => d.date !== date),
+      preferredDates: state.preferredDates
+        .filter((_, i) => i !== index)
+        .map((d, i) => ({ ...d, sort_order: i })),
     })),
+  clearPreferredDates: () => set({ preferredDates: [] }),
 
-  updateTimePreference: (date, preference) =>
-    set((state) => ({
-      preferredDates: state.preferredDates.map((d) =>
-        d.date === date ? { ...d, time_preference: preference } : d
-      ),
-    })),
+  setHasOccasion: (val) => set({ hasOccasion: val, occasionDetails: val ? get().occasionDetails : "" }),
+  setOccasionDetails: (text) => set({ occasionDetails: text }),
 
-  setOccasion: (hasOccasion, details) =>
-    set({ hasOccasion, occasionDetails: details }),
+  setContactFirstName: (val) => set({ contactFirstName: val }),
+  setContactLastName: (val) => set({ contactLastName: val }),
+  setContactEmail: (val) => set({ contactEmail: val }),
+  setContactPhone: (val) => set({ contactPhone: val }),
 
-  setStep: (step) => set({ currentStep: step, error: null }),
+  setCurrentStep: (step) => set({ currentStep: step }),
+  nextStep: () => set((state) => ({ currentStep: Math.min(4, state.currentStep + 1) })),
+  prevStep: () => set((state) => ({ currentStep: Math.max(1, state.currentStep - 1) })),
 
-  setSubmitting: (v) => set({ isSubmitting: v }),
-
+  setIsSubmitting: (val) => set({ isSubmitting: val }),
   setSubmittedRef: (ref) => set({ submittedRef: ref }),
 
-  setError: (err) => set({ error: err }),
+  totalPeople: () => get().adultCount + get().childCount,
+
+  canSubmit: () => {
+    const s = get();
+    return (
+      s.totalPeople() >= 1 &&
+      s.totalPeople() <= 10 &&
+      s.preferredDates.length >= 1 &&
+      s.contactFirstName.trim() !== "" &&
+      s.contactLastName.trim() !== "" &&
+      s.contactEmail.trim() !== "" &&
+      s.contactPhone.trim() !== ""
+    );
+  },
 
   reset: () => set(initialState),
 }));

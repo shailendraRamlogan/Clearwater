@@ -1,192 +1,167 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { format } from "date-fns";
 import {
-  User,
-  Users,
-  Calendar,
-  Heart,
-  ClipboardCheck,
   ChevronLeft,
   ChevronRight,
-  Sparkles,
-  Minus,
+  Users,
+  Calendar,
+  PartyPopper,
+  User,
+  Send,
   Plus,
   X,
+  Minus,
+  Sparkles,
+  CheckCircle,
   Sun,
   CloudSun,
 } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import "react-phone-input-2/lib/style.css";
-import PhoneInput from "react-phone-input-2";
+import { Switch } from "@/components/ui/switch";
+import { ModernCalendar } from "@/components/ui/calendar";
 import { usePrivateTourStore } from "@/stores/private-tour-store";
 import { createPrivateTourRequest } from "@/lib/private-tour-service";
-// formatDate not needed here — dates formatted inline
 import { toast } from "sonner";
-import Link from "next/link";
 
-const stepIcons = [User, Users, Calendar, Heart, ClipboardCheck];
-const stepLabels = ["Contact", "Guests", "Dates", "Occasion", "Review"];
+const stepIcons = [Users, Calendar, PartyPopper, User];
+const stepLabels = ["Party Size", "Preferred Dates", "Occasion", "Your Details"];
 
-function PrivateTourForm() {
+function PrivateTourPage() {
   const store = usePrivateTourStore();
+  const router = useRouter();
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [selectedDate, setSelectedDate] = useState<string>("");
+  const [submittedRef, setSubmittedRef] = useState<string | null>(null);
+  const [calendarDate, setCalendarDate] = useState<Date | undefined>(undefined);
+  const [selectedTimePref, setSelectedTimePref] = useState<"morning" | "afternoon">("morning");
 
-  const totalPayingGuests = store.adultCount + store.childCount;
+  // Cleanup store on unmount
+  useEffect(() => {
+    return () => usePrivateTourStore.getState().reset();
+  }, []);
 
-  function validateStep(step: number): boolean {
-    const e: Record<string, string> = {};
+  const handleSubmit = async () => {
     setErrors({});
-
-    if (step === 0) {
-      if (!store.firstName.trim()) e.firstName = "First name is required";
-      if (!store.lastName.trim()) e.lastName = "Last name is required";
-      if (!store.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(store.email))
-        e.email = "Valid email is required";
-      if (!store.phone.trim() || store.phone.length < 6)
-        e.phone = "Valid phone number is required";
-    } else if (step === 1) {
-      if (totalPayingGuests === 0)
-        e.guests = "At least 1 adult or child is required";
-      if (totalPayingGuests > 10)
-        e.guests = "Maximum 10 guests (adults + children)";
-    } else if (step === 2) {
-      if (store.preferredDates.length === 0)
-        e.dates = "Please select at least 1 preferred date";
-      if (store.preferredDates.length > 5)
-        e.dates = "Maximum 5 preferred dates";
-    } else if (step === 3) {
-      if (store.hasOccasion && !store.occasionDetails.trim())
-        e.occasion = "Please describe the occasion";
-    }
-
-    if (Object.keys(e).length > 0) {
-      setErrors(e);
-      return false;
-    }
-    return true;
-  }
-
-  function nextStep() {
-    if (validateStep(store.currentStep)) {
-      store.setStep(store.currentStep + 1);
-    }
-  }
-
-  function prevStep() {
-    store.setStep(store.currentStep - 1);
-  }
-
-  function handleAddDate() {
-    if (!selectedDate) return;
-    if (store.preferredDates.some((d) => d.date === selectedDate)) {
-      toast.error("Date already selected");
+    if (!store.canSubmit()) {
+      toast.error("Please fill in all required fields.");
       return;
     }
-    if (store.preferredDates.length >= 5) {
-      toast.error("Maximum 5 dates");
-      return;
-    }
-    store.addPreferredDate(selectedDate, "morning");
-    setSelectedDate("");
-  }
 
-  async function handleSubmit() {
-    if (!validateStep(4)) return;
-    store.setSubmitting(true);
-    store.setError(null);
-
+    store.setIsSubmitting(true);
     try {
       const result = await createPrivateTourRequest({
-        contact_first_name: store.firstName,
-        contact_last_name: store.lastName,
-        contact_email: store.email,
-        contact_phone: store.phone,
+        contact_first_name: store.contactFirstName.trim(),
+        contact_last_name: store.contactLastName.trim(),
+        contact_email: store.contactEmail.trim(),
+        contact_phone: store.contactPhone.trim(),
         adult_count: store.adultCount,
         child_count: store.childCount,
         infant_count: store.infantCount,
         has_occasion: store.hasOccasion,
-        occasion_details: store.hasOccasion
-          ? store.occasionDetails
-          : undefined,
+        occasion_details: store.occasionDetails.trim(),
         preferred_dates: store.preferredDates.map((d) => ({
           date: d.date,
           time_preference: d.time_preference,
         })),
       });
-      store.setSubmittedRef(result.booking_ref);
-      toast.success("Request submitted! We'll be in touch soon.");
-    } catch (err: unknown) {
-      const error = err as { response?: { data?: { message?: string; errors?: Record<string, string> } } };
-      const msg =
-        error.response?.data?.message ||
-        Object.values(error.response?.data?.errors || {})[0] ||
-        "Something went wrong. Please try again.";
-      store.setError(msg);
-      toast.error(msg);
-    } finally {
-      store.setSubmitting(false);
-    }
-  }
 
-  // Confirmation screen
-  if (store.submittedRef) {
+      setSubmittedRef(result.booking_ref);
+      store.setSubmittedRef(result.booking_ref);
+    } catch (err: unknown) {
+      const error = err as Error & { status?: number; errors?: Record<string, string[]> };
+      if (error.errors) {
+        const fieldErrors: Record<string, string> = {};
+        for (const [field, msgs] of Object.entries(error.errors)) {
+          fieldErrors[field] = Array.isArray(msgs) ? msgs[0] : String(msgs);
+        }
+        setErrors(fieldErrors);
+        toast.error("Please fix the highlighted fields.");
+      } else {
+        toast.error(error.message || "Something went wrong. Please try again.");
+      }
+    } finally {
+      store.setIsSubmitting(false);
+    }
+  };
+
+  // Success state
+  if (submittedRef) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-ocean-50 to-white flex items-center justify-center px-4 -mt-16">
-        <Card className="max-w-lg w-full border-ocean-100 shadow-lg">
-          <CardContent className="pt-10 pb-10 text-center">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-6">
-              <Sparkles className="h-8 w-8 text-green-600" />
-            </div>
-            <h1 className="text-2xl font-bold text-ocean-900 mb-3">
-              Request Submitted!
-            </h1>
-            <p className="text-ocean-500 mb-6 leading-relaxed">
-              Thank you for your interest in a private tour! We&apos;ll review
-              your request and get back to you within{" "}
-              <strong>24–48 hours</strong> with a personalized quote.
-            </p>
-            <div className="bg-ocean-50 rounded-lg p-4 mb-6">
-              <p className="text-sm text-ocean-500 mb-1">Your Reference</p>
-              <p className="text-xl font-bold text-ocean-700 font-mono">
-                {store.submittedRef}
+      <div className="section-container py-8 sm:py-20">
+        <div className="max-w-lg mx-auto text-center">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-6">
+            <CheckCircle className="h-8 w-8 text-green-500" />
+          </div>
+          <h1 className="text-3xl font-bold mb-4 text-ocean-900">
+            Request Submitted!
+          </h1>
+          <p className="text-ocean-500 mb-2">
+            Your reference is{" "}
+            <span className="font-mono font-bold text-ocean-700">
+              {submittedRef}
+            </span>
+          </p>
+          <p className="text-ocean-500 mb-8">
+            We&apos;ll review your request and send you a quote within 24 hours.
+            A confirmation email has been sent to{" "}
+            <span className="font-medium">{store.contactEmail}</span>.
+          </p>
+          <div className="bg-ocean-50 rounded-lg p-6 mb-8 text-left">
+            <h3 className="font-semibold mb-3 text-ocean-900">Request Summary</h3>
+            <div className="space-y-2 text-sm text-ocean-600">
+              <p>
+                <span className="text-ocean-400">Party:</span>{" "}
+                {store.adultCount} adult{store.adultCount !== 1 ? "s" : ""}
+                {store.childCount > 0 && `, ${store.childCount} child${store.childCount !== 1 ? "ren" : ""}`}
+                {store.infantCount > 0 && `, ${store.infantCount} infant${store.infantCount !== 1 ? "s" : ""}`}
               </p>
+              {store.preferredDates.map((d, i) => (
+                <p key={i}>
+                  <span className="text-ocean-400">Date {i + 1}:</span>{" "}
+                  {format(new Date(d.date + "T12:00:00"), "EEEE, MMMM d, yyyy")} — {d.time_preference}
+                </p>
+              ))}
+              {store.hasOccasion && store.occasionDetails && (
+                <p>
+                  <span className="text-ocean-400">Occasion:</span> {store.occasionDetails}
+                </p>
+              )}
             </div>
-            <p className="text-sm text-ocean-400 mb-6">
-              A confirmation email has been sent to{" "}
-              <strong>{store.email}</strong>
-            </p>
-            <div className="flex flex-col sm:flex-row gap-3 justify-center">
-              <Link href="/">
-                <Button variant="outline" className="w-full sm:w-auto">
-                  Back to Home
-                </Button>
-              </Link>
-              <Button
-                variant="cta"
-                className="w-full sm:w-auto"
-                onClick={() => store.reset()}
-              >
-                Submit Another Request
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+          </div>
+          <div className="flex gap-4 justify-center">
+            <Button variant="outline" onClick={() => router.push("/book")}>
+              Book a Regular Tour
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                store.reset();
+                setSubmittedRef(null);
+              }}
+            >
+              Submit Another Request
+            </Button>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-ocean-50 to-white -mt-16">
-      <div className="section-container py-8 sm:py-16">
+    <div className="relative overflow-hidden">
+      {/* Background gradient */}
+      <div className="absolute inset-0 bg-gradient-to-br from-ocean-50 via-white to-sand-50 pointer-events-none" />
+
+      <div className="section-container py-16 sm:py-24 relative z-10">
         {/* Header */}
         <div className="text-center mb-10">
-          <div className="inline-flex items-center gap-2 bg-ocean-100 text-ocean-700 px-4 py-2 rounded-full text-sm font-medium mb-4">
+          <div className="inline-flex items-center gap-2 bg-ocean-100 text-ocean-700 px-4 py-1.5 rounded-full text-sm font-medium mb-4">
             <Sparkles className="h-4 w-4" />
             Private Tour
           </div>
@@ -194,668 +169,483 @@ function PrivateTourForm() {
             Book a Private Tour
           </h1>
           <p className="text-ocean-500 max-w-xl mx-auto">
-            Get the whole boat to yourself! Perfect for celebrations, family
-            reunions, or a special day on the water. Up to 10 guests.
+            Have the whole boat to yourself! Tell us about your group and preferred dates,
+            and we&apos;ll send you a custom quote.
           </p>
         </div>
 
-        {/* Step Indicator */}
-        <div className="flex items-center justify-center gap-1 sm:gap-2 mb-10 max-w-2xl mx-auto">
-          {stepIcons.map((Icon, idx) => (
-            <div key={idx} className="flex items-center">
-              <div className="flex flex-col items-center">
-                <div
-                  className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center transition-colors ${
-                    idx < store.currentStep
-                      ? "bg-ocean-700 text-white"
-                      : idx === store.currentStep
-                        ? "bg-ocean-700 text-white ring-4 ring-ocean-100"
+        {/* Progress */}
+        <div className="mb-10">
+          <div className="flex items-center justify-between max-w-xl mx-auto mb-4">
+            {stepIcons.map((Icon, i) => {
+              const step = i + 1;
+              const isActive = store.currentStep === step;
+              const isComplete = store.currentStep > step;
+              return (
+                <div key={i} className="flex flex-col items-center">
+                  <div
+                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
+                      isComplete
+                        ? "bg-ocean-700 text-white"
+                        : isActive
+                        ? "bg-ocean-700 text-white ring-4 ring-ocean-200"
                         : "bg-ocean-100 text-ocean-400"
-                  }`}
-                >
-                  {idx < store.currentStep ? (
-                    <svg
-                      className="w-5 h-5"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M5 13l4 4L19 7"
-                      />
-                    </svg>
-                  ) : (
-                    <Icon className="w-5 h-5" />
-                  )}
-                </div>
-                <span
-                  className={`text-xs mt-1.5 font-medium hidden sm:block ${
-                    idx <= store.currentStep
-                      ? "text-ocean-700"
-                      : "text-ocean-300"
-                  }`}
-                >
-                  {stepLabels[idx]}
-                </span>
-              </div>
-              {idx < stepIcons.length - 1 && (
-                <div
-                  className={`w-8 sm:w-16 h-0.5 mx-1 rounded transition-colors ${
-                    idx < store.currentStep ? "bg-ocean-700" : "bg-ocean-200"
-                  }`}
-                />
-              )}
-            </div>
-          ))}
-        </div>
-
-        {/* Form Card */}
-        <Card className="max-w-2xl mx-auto border-ocean-100 shadow-sm">
-          <CardContent className="pt-8 pb-8">
-            {/* Step 0: Contact Info */}
-            {store.currentStep === 0 && (
-              <div className="space-y-6">
-                <h2 className="text-xl font-semibold text-ocean-900 mb-1">
-                  Contact Information
-                </h2>
-                <p className="text-ocean-400 text-sm mb-4">
-                  We&apos;ll use this to send you your quote.
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="firstName">First Name</Label>
-                    <Input
-                      id="firstName"
-                      placeholder="John"
-                      value={store.firstName}
-                      onChange={(e) =>
-                        store.setContact(
-                          e.target.value,
-                          store.lastName,
-                          store.email,
-                          store.phone
-                        )
-                      }
-                    />
-                    {errors.firstName && (
-                      <p className="text-sm text-red-500">{errors.firstName}</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="lastName">Last Name</Label>
-                    <Input
-                      id="lastName"
-                      placeholder="Doe"
-                      value={store.lastName}
-                      onChange={(e) =>
-                        store.setContact(
-                          store.firstName,
-                          e.target.value,
-                          store.email,
-                          store.phone
-                        )
-                      }
-                    />
-                    {errors.lastName && (
-                      <p className="text-sm text-red-500">{errors.lastName}</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      placeholder="john@example.com"
-                      value={store.email}
-                      onChange={(e) =>
-                        store.setContact(
-                          store.firstName,
-                          store.lastName,
-                          e.target.value,
-                          store.phone
-                        )
-                      }
-                    />
-                    {errors.email && (
-                      <p className="text-sm text-red-500">{errors.email}</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="phone">Phone</Label>
-                    <PhoneInput
-                      country={"bs"}
-                      value={store.phone}
-                      onChange={(phone) =>
-                        store.setContact(
-                          store.firstName,
-                          store.lastName,
-                          store.email,
-                          phone
-                        )
-                      }
-                      inputStyle={{
-                        width: "100%",
-                        height: "42px",
-                        fontSize: "14px",
-                        borderColor: errors.phone ? "#ef4444" : undefined,
-                      }}
-                      containerStyle={{ marginTop: "0" }}
-                    />
-                    {errors.phone && (
-                      <p className="text-sm text-red-500">{errors.phone}</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Step 1: Guest Counts */}
-            {store.currentStep === 1 && (
-              <div className="space-y-6">
-                <h2 className="text-xl font-semibold text-ocean-900 mb-1">
-                  Guest Count
-                </h2>
-                <p className="text-ocean-400 text-sm mb-4">
-                  Private tours accommodate up to 10 paying guests (adults +
-                  children).
-                </p>
-
-                {errors.guests && (
-                  <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-600">
-                    {errors.guests}
-                  </div>
-                )}
-
-                <div className="space-y-4">
-                  {/* Adults */}
-                  <div className="flex items-center justify-between bg-white border border-ocean-100 rounded-lg p-4">
-                    <div>
-                      <p className="font-medium text-ocean-900">Adults</p>
-                      <p className="text-sm text-ocean-400">Age 18+</p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-9 w-9"
-                        onClick={() =>
-                          store.setGuestCounts(
-                            Math.max(0, store.adultCount - 1),
-                            store.childCount,
-                            store.infantCount
-                          )
-                        }
-                      >
-                        <Minus className="h-4 w-4" />
-                      </Button>
-                      <span className="w-8 text-center text-lg font-semibold text-ocean-900">
-                        {store.adultCount}
-                      </span>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-9 w-9"
-                        disabled={totalPayingGuests >= 10}
-                        onClick={() =>
-                          store.setGuestCounts(
-                            store.adultCount + 1,
-                            store.childCount,
-                            store.infantCount
-                          )
-                        }
-                      >
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  {/* Children */}
-                  <div className="flex items-center justify-between bg-white border border-ocean-100 rounded-lg p-4">
-                    <div>
-                      <p className="font-medium text-ocean-900">Children</p>
-                      <p className="text-sm text-ocean-400">Age 3–17</p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-9 w-9"
-                        onClick={() =>
-                          store.setGuestCounts(
-                            store.adultCount,
-                            Math.max(0, store.childCount - 1),
-                            store.infantCount
-                          )
-                        }
-                      >
-                        <Minus className="h-4 w-4" />
-                      </Button>
-                      <span className="w-8 text-center text-lg font-semibold text-ocean-900">
-                        {store.childCount}
-                      </span>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-9 w-9"
-                        disabled={totalPayingGuests >= 10}
-                        onClick={() =>
-                          store.setGuestCounts(
-                            store.adultCount,
-                            store.childCount + 1,
-                            store.infantCount
-                          )
-                        }
-                      >
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  {/* Infants */}
-                  <div className="flex items-center justify-between bg-white border border-ocean-100 rounded-lg p-4">
-                    <div>
-                      <p className="font-medium text-ocean-900">Infants</p>
-                      <p className="text-sm text-ocean-400">
-                        Age 2 and under — free!
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-9 w-9"
-                        onClick={() =>
-                          store.setGuestCounts(
-                            store.adultCount,
-                            store.childCount,
-                            Math.max(0, store.infantCount - 1)
-                          )
-                        }
-                      >
-                        <Minus className="h-4 w-4" />
-                      </Button>
-                      <span className="w-8 text-center text-lg font-semibold text-ocean-900">
-                        {store.infantCount}
-                      </span>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-9 w-9"
-                        onClick={() =>
-                          store.setGuestCounts(
-                            store.adultCount,
-                            store.childCount,
-                            store.infantCount + 1
-                          )
-                        }
-                      >
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-ocean-50 rounded-lg p-4 text-sm text-ocean-600 text-center">
-                  Total paying guests:{" "}
-                  <strong className="text-ocean-900">
-                    {totalPayingGuests} / 10
-                  </strong>
-                  {store.infantCount > 0 && (
-                    <span className="text-ocean-400">
-                      {" "}
-                      (+ {store.infantCount} infant
-                      {store.infantCount > 1 ? "s" : ""} free)
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Step 2: Preferred Dates */}
-            {store.currentStep === 2 && (
-              <div className="space-y-6">
-                <h2 className="text-xl font-semibold text-ocean-900 mb-1">
-                  Preferred Dates
-                </h2>
-                <p className="text-ocean-400 text-sm mb-4">
-                  Select up to 5 dates that work for you. We&apos;ll confirm one
-                  based on availability.
-                </p>
-
-                {errors.dates && (
-                  <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-600">
-                    {errors.dates}
-                  </div>
-                )}
-
-                {/* Date Picker */}
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <Input
-                    type="date"
-                    value={selectedDate}
-                    onChange={(e) => setSelectedDate(e.target.value)}
-                    min={new Date().toISOString().split("T")[0]}
-                    className="flex-1"
-                  />
-                  <Button
-                    variant="cta"
-                    onClick={handleAddDate}
-                    disabled={
-                      !selectedDate || store.preferredDates.length >= 5
-                    }
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Date
-                  </Button>
-                </div>
-
-                {/* Selected Dates as Chips */}
-                {store.preferredDates.length > 0 && (
-                  <div className="space-y-3">
-                    <p className="text-sm font-medium text-ocean-700">
-                      {store.preferredDates.length} of 5 dates selected
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {store.preferredDates.map((d) => {
-                        const dateObj = new Date(d.date + "T12:00:00");
-                        const formatted = dateObj.toLocaleDateString("en-US", {
-                          weekday: "short",
-                          month: "short",
-                          day: "numeric",
-                        });
-                        const isMorning = d.time_preference === "morning";
-
-                        return (
-                          <div
-                            key={d.date}
-                            className="flex items-center gap-1 bg-ocean-50 border border-ocean-200 rounded-full pl-1 pr-2 py-1"
-                          >
-                            <button
-                              onClick={() =>
-                                store.updateTimePreference(
-                                  d.date,
-                                  isMorning ? "afternoon" : "morning"
-                                )
-                              }
-                              className="flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium transition-colors cursor-pointer"
-                              title="Click to toggle morning/afternoon"
-                            >
-                              {isMorning ? (
-                                <>
-                                  <Sun className="h-3.5 w-3.5 text-amber-500" />
-                                  <span className="text-amber-700">AM</span>
-                                </>
-                              ) : (
-                                <>
-                                  <CloudSun className="h-3.5 w-3.5 text-orange-500" />
-                                  <span className="text-orange-700">PM</span>
-                                </>
-                              )}
-                            </button>
-                            <span className="text-sm text-ocean-800 font-medium">
-                              {formatted}
-                            </span>
-                            <button
-                              onClick={() => store.removePreferredDate(d.date)}
-                              className="text-ocean-400 hover:text-red-500 transition-colors ml-1"
-                            >
-                              <X className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <p className="text-xs text-ocean-400">
-                      💡 Click the sun/moon icon to toggle between morning and
-                      afternoon preference
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Step 3: Occasion */}
-            {store.currentStep === 3 && (
-              <div className="space-y-6">
-                <h2 className="text-xl font-semibold text-ocean-900 mb-1">
-                  Special Occasion
-                </h2>
-                <p className="text-ocean-400 text-sm mb-4">
-                  Let us know if this is for a special occasion so we can make
-                  it extra memorable!
-                </p>
-
-                <div className="flex items-center gap-3 bg-white border border-ocean-100 rounded-lg p-4">
-                  <button
-                    onClick={() =>
-                      store.setOccasion(!store.hasOccasion, "")
-                    }
-                    className={`relative w-12 h-6 rounded-full transition-colors ${
-                      store.hasOccasion ? "bg-ocean-700" : "bg-ocean-200"
                     }`}
                   >
-                    <span
-                      className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
-                        store.hasOccasion ? "translate-x-6" : ""
-                      }`}
-                    />
-                  </button>
-                  <span className="font-medium text-ocean-900">
-                    This is for a special occasion
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <span
+                    className={`text-xs mt-2 font-medium hidden sm:block ${
+                      isActive ? "text-ocean-700" : "text-ocean-400"
+                    }`}
+                  >
+                    {stepLabels[i]}
                   </span>
+                </div>
+              );
+            })}
+          </div>
+          <div className="max-w-xl mx-auto h-1 bg-ocean-100 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-ocean-700 rounded-full transition-all duration-300"
+              style={{ width: `${((store.currentStep - 1) / 3) * 100}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Steps */}
+        <div className="max-w-xl mx-auto">
+          {/* Step 1: Party Size */}
+          {store.currentStep === 1 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-xl sm:text-2xl">How Many Guests?</CardTitle>
+                <p className="text-ocean-500 text-sm">
+                  Private tours accommodate up to 10 guests. Infants (≤2 years) are free and not counted.
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Adults */}
+                <div className="flex items-center justify-between p-4 bg-ocean-50 rounded-lg">
+                  <div>
+                    <Label className="text-base font-medium">Adults</Label>
+                    <p className="text-ocean-400 text-sm">Ages 18+</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => store.setAdultCount(store.adultCount - 1)}
+                      disabled={store.adultCount <= 0}
+                      className="w-9 h-9 rounded-full border border-ocean-200 flex items-center justify-center hover:bg-ocean-100 disabled:opacity-40 transition-colors"
+                    >
+                      <Minus className="h-4 w-4" />
+                    </button>
+                    <span className="w-8 text-center text-lg font-bold text-ocean-900">
+                      {store.adultCount}
+                    </span>
+                    <button
+                      onClick={() => store.setAdultCount(store.adultCount + 1)}
+                      disabled={store.totalPeople() >= 10}
+                      className="w-9 h-9 rounded-full border border-ocean-200 flex items-center justify-center hover:bg-ocean-100 disabled:opacity-40 transition-colors"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Children */}
+                <div className="flex items-center justify-between p-4 bg-ocean-50 rounded-lg">
+                  <div>
+                    <Label className="text-base font-medium">Children</Label>
+                    <p className="text-ocean-400 text-sm">Ages 3–17</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => store.setChildCount(store.childCount - 1)}
+                      disabled={store.childCount <= 0}
+                      className="w-9 h-9 rounded-full border border-ocean-200 flex items-center justify-center hover:bg-ocean-100 disabled:opacity-40 transition-colors"
+                    >
+                      <Minus className="h-4 w-4" />
+                    </button>
+                    <span className="w-8 text-center text-lg font-bold text-ocean-900">
+                      {store.childCount}
+                    </span>
+                    <button
+                      onClick={() => store.setChildCount(store.childCount + 1)}
+                      disabled={store.totalPeople() >= 10}
+                      className="w-9 h-9 rounded-full border border-ocean-200 flex items-center justify-center hover:bg-ocean-100 disabled:opacity-40 transition-colors"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Infants */}
+                <div className="flex items-center justify-between p-4 bg-sand-50 rounded-lg">
+                  <div>
+                    <Label className="text-base font-medium">Infants</Label>
+                    <p className="text-ocean-400 text-sm">≤2 years (Free)</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => store.setInfantCount(store.infantCount - 1)}
+                      disabled={store.infantCount <= 0}
+                      className="w-9 h-9 rounded-full border border-sand-200 flex items-center justify-center hover:bg-sand-100 disabled:opacity-40 transition-colors"
+                    >
+                      <Minus className="h-4 w-4" />
+                    </button>
+                    <span className="w-8 text-center text-lg font-bold text-ocean-900">
+                      {store.infantCount}
+                    </span>
+                    <button
+                      onClick={() => store.setInfantCount(store.infantCount + 1)}
+                      className="w-9 h-9 rounded-full border border-sand-200 flex items-center justify-center hover:bg-sand-100 transition-colors"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Total */}
+                <div className="text-center p-3 bg-ocean-700 text-white rounded-lg">
+                  <span className="text-sm opacity-80">Total guests:</span>{" "}
+                  <span className="text-xl font-bold">{store.totalPeople()}</span>
+                  <span className="text-sm opacity-80"> / 10</span>
+                </div>
+
+                {errors.adult_count && (
+                  <p className="text-sm text-red-500">{errors.adult_count}</p>
+                )}
+
+                <div className="flex justify-end">
+                  <Button
+                    variant="cta"
+                    disabled={store.totalPeople() < 1}
+                    onClick={() => store.nextStep()}
+                  >
+                    Choose Dates
+                    <ChevronRight className="ml-2 h-4 w-4" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Step 2: Preferred Dates */}
+          {store.currentStep === 2 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-xl sm:text-2xl">Preferred Dates</CardTitle>
+                <p className="text-ocean-500 text-sm">
+                  Pick up to 5 preferred dates. We&apos;ll do our best to accommodate you.
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Calendar */}
+                <div className="flex justify-center">
+                  <ModernCalendar
+                    selected={calendarDate}
+                    onSelect={(date) => setCalendarDate(date)}
+                  />
+                </div>
+
+                {/* Time preference */}
+                {calendarDate && (
+                  <div className="flex gap-3 justify-center">
+                    <button
+                      onClick={() => setSelectedTimePref("morning")}
+                      className={`flex items-center gap-2 px-5 py-3 rounded-lg border-2 transition-all ${
+                        selectedTimePref === "morning"
+                          ? "border-ocean-700 bg-ocean-50 text-ocean-700"
+                          : "border-ocean-100 text-ocean-500 hover:border-ocean-200"
+                      }`}
+                    >
+                      <Sun className="h-4 w-4" />
+                      Morning
+                    </button>
+                    <button
+                      onClick={() => setSelectedTimePref("afternoon")}
+                      className={`flex items-center gap-2 px-5 py-3 rounded-lg border-2 transition-all ${
+                        selectedTimePref === "afternoon"
+                          ? "border-ocean-700 bg-ocean-50 text-ocean-700"
+                          : "border-ocean-100 text-ocean-500 hover:border-ocean-200"
+                      }`}
+                    >
+                      <CloudSun className="h-4 w-4" />
+                      Afternoon
+                    </button>
+                  </div>
+                )}
+
+                {/* Add date button */}
+                {calendarDate && (
+                  <div className="flex justify-center">
+                    <Button
+                      variant="outline"
+                      disabled={
+                        store.preferredDates.length >= 5 ||
+                        store.preferredDates.some(
+                          (d) =>
+                            d.date === format(calendarDate, "yyyy-MM-dd") &&
+                            d.time_preference === selectedTimePref
+                        )
+                      }
+                      onClick={() => {
+                        store.addPreferredDate(
+                          format(calendarDate, "yyyy-MM-dd"),
+                          selectedTimePref
+                        );
+                        setCalendarDate(undefined);
+                      }}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add {format(calendarDate, "MMM d")} — {selectedTimePref}
+                    </Button>
+                  </div>
+                )}
+
+                {/* Selected dates list */}
+                {store.preferredDates.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium text-ocean-700">
+                      Your preferred dates ({store.preferredDates.length}/5):
+                    </p>
+                    {store.preferredDates.map((d, i) => (
+                      <div
+                        key={i}
+                        className="flex items-center justify-between p-3 bg-ocean-50 rounded-lg"
+                      >
+                        <div className="flex items-center gap-2 text-sm">
+                          <Calendar className="h-4 w-4 text-ocean-500" />
+                          <span className="font-medium">
+                            {format(new Date(d.date + "T12:00:00"), "EEEE, MMMM d, yyyy")}
+                          </span>
+                          <span className="text-ocean-400">—</span>
+                          <span className="text-ocean-600 capitalize">{d.time_preference}</span>
+                        </div>
+                        <button
+                          onClick={() => store.removePreferredDate(i)}
+                          className="text-ocean-400 hover:text-red-500 transition-colors"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {errors.preferred_dates && (
+                  <p className="text-sm text-red-500">{errors.preferred_dates}</p>
+                )}
+
+                <div className="flex justify-between">
+                  <Button variant="outline" onClick={() => store.prevStep()}>
+                    <ChevronLeft className="mr-2 h-4 w-4" />
+                    Back
+                  </Button>
+                  <Button
+                    variant="cta"
+                    disabled={store.preferredDates.length < 1}
+                    onClick={() => store.nextStep()}
+                  >
+                    Continue
+                    <ChevronRight className="ml-2 h-4 w-4" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Step 3: Occasion */}
+          {store.currentStep === 3 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-xl sm:text-2xl">Special Occasion?</CardTitle>
+                <p className="text-ocean-500 text-sm">
+                  Celebrating something? Let us know so we can make it extra special.
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="flex items-center justify-between p-4 bg-ocean-50 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <PartyPopper className="h-5 w-5 text-ocean-500" />
+                    <div>
+                      <Label className="text-base font-medium">This is a special occasion</Label>
+                      <p className="text-ocean-400 text-sm">Birthday, anniversary, proposal, etc.</p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={store.hasOccasion}
+                    onCheckedChange={(checked) => store.setHasOccasion(checked)}
+                  />
                 </div>
 
                 {store.hasOccasion && (
                   <div className="space-y-2">
-                    <Label htmlFor="occasionDetails">
-                      Tell us about it!
-                    </Label>
+                    <Label htmlFor="occasion-details">Tell us about it</Label>
                     <Textarea
-                      id="occasionDetails"
-                      placeholder="e.g., Birthday celebration for Sarah, 10th anniversary, etc."
+                      id="occasion-details"
+                      placeholder="e.g., We're celebrating my daughter's 10th birthday!..."
                       value={store.occasionDetails}
-                      onChange={(e) =>
-                        store.setOccasion(true, e.target.value)
-                      }
+                      onChange={(e) => store.setOccasionDetails(e.target.value)}
                       rows={3}
-                      maxLength={500}
                     />
-                    {errors.occasion && (
-                      <p className="text-sm text-red-500">
-                        {errors.occasion}
-                      </p>
-                    )}
-                    <p className="text-xs text-ocean-400 text-right">
-                      {store.occasionDetails.length}/500
-                    </p>
                   </div>
                 )}
-              </div>
-            )}
 
-            {/* Step 4: Review */}
-            {store.currentStep === 4 && (
-              <div className="space-y-6">
-                <h2 className="text-xl font-semibold text-ocean-900 mb-1">
-                  Review & Submit
-                </h2>
-                <p className="text-ocean-400 text-sm mb-4">
-                  Please review your request before submitting. Our team will
-                  send you a personalized quote within 24–48 hours.
+                <div className="flex justify-between">
+                  <Button variant="outline" onClick={() => store.prevStep()}>
+                    <ChevronLeft className="mr-2 h-4 w-4" />
+                    Back
+                  </Button>
+                  <Button variant="cta" onClick={() => store.nextStep()}>
+                    Your Details
+                    <ChevronRight className="ml-2 h-4 w-4" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Step 4: Contact Details + Submit */}
+          {store.currentStep === 4 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-xl sm:text-2xl">Your Details</CardTitle>
+                <p className="text-ocean-500 text-sm">
+                  We&apos;ll use this to send you a quote and coordinate the tour.
                 </p>
-
-                <div className="space-y-4">
-                  {/* Contact */}
-                  <div className="bg-ocean-50 rounded-lg p-4">
-                    <h3 className="text-sm font-semibold text-ocean-700 mb-2 flex items-center gap-2">
-                      <User className="h-4 w-4" /> Contact Information
-                    </h3>
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div>
-                        <span className="text-ocean-400">Name</span>
-                        <p className="font-medium text-ocean-900">
-                          {store.firstName} {store.lastName}
-                        </p>
-                      </div>
-                      <div>
-                        <span className="text-ocean-400">Email</span>
-                        <p className="font-medium text-ocean-900">
-                          {store.email}
-                        </p>
-                      </div>
-                      <div className="col-span-2">
-                        <span className="text-ocean-400">Phone</span>
-                        <p className="font-medium text-ocean-900">
-                          {store.phone}
-                        </p>
-                      </div>
-                    </div>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="first-name">First Name *</Label>
+                    <Input
+                      id="first-name"
+                      placeholder="John"
+                      value={store.contactFirstName}
+                      onChange={(e) => store.setContactFirstName(e.target.value)}
+                      className={errors.contact_first_name ? "border-red-400" : ""}
+                    />
+                    {errors.contact_first_name && (
+                      <p className="text-xs text-red-500">{errors.contact_first_name}</p>
+                    )}
                   </div>
-
-                  {/* Guests */}
-                  <div className="bg-ocean-50 rounded-lg p-4">
-                    <h3 className="text-sm font-semibold text-ocean-700 mb-2 flex items-center gap-2">
-                      <Users className="h-4 w-4" /> Guests
-                    </h3>
-                    <div className="flex gap-4 text-sm">
-                      <span>
-                        <strong>{store.adultCount}</strong> Adult
-                        {store.adultCount !== 1 ? "s" : ""}
-                      </span>
-                      <span>
-                        <strong>{store.childCount}</strong> Child
-                        {store.childCount !== 1 ? "ren" : ""}
-                      </span>
-                      {store.infantCount > 0 && (
-                        <span>
-                          <strong>{store.infantCount}</strong> Infant
-                          {store.infantCount !== 1 ? "s" : ""} (free)
-                        </span>
-                      )}
-                    </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="last-name">Last Name *</Label>
+                    <Input
+                      id="last-name"
+                      placeholder="Smith"
+                      value={store.contactLastName}
+                      onChange={(e) => store.setContactLastName(e.target.value)}
+                      className={errors.contact_last_name ? "border-red-400" : ""}
+                    />
+                    {errors.contact_last_name && (
+                      <p className="text-xs text-red-500">{errors.contact_last_name}</p>
+                    )}
                   </div>
+                </div>
 
-                  {/* Dates */}
-                  <div className="bg-ocean-50 rounded-lg p-4">
-                    <h3 className="text-sm font-semibold text-ocean-700 mb-2 flex items-center gap-2">
-                      <Calendar className="h-4 w-4" /> Preferred Dates
-                    </h3>
-                    <div className="flex flex-wrap gap-2">
-                      {store.preferredDates.map((d) => {
-                        const dateObj = new Date(d.date + "T12:00:00");
-                        const formatted = dateObj.toLocaleDateString("en-US", {
-                          weekday: "short",
-                          month: "short",
-                          day: "numeric",
-                        });
-                        return (
-                          <span
-                            key={d.date}
-                            className="inline-flex items-center gap-1.5 bg-white border border-ocean-200 rounded-full px-3 py-1 text-sm"
-                          >
-                            {d.time_preference === "morning" ? (
-                              <Sun className="h-3.5 w-3.5 text-amber-500" />
-                            ) : (
-                              <CloudSun className="h-3.5 w-3.5 text-orange-500" />
-                            )}
-                            {formatted}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Occasion */}
-                  {store.hasOccasion && (
-                    <div className="bg-ocean-50 rounded-lg p-4">
-                      <h3 className="text-sm font-semibold text-ocean-700 mb-2 flex items-center gap-2">
-                        <Heart className="h-4 w-4" /> Special Occasion
-                      </h3>
-                      <p className="text-sm text-ocean-900">
-                        {store.occasionDetails}
-                      </p>
-                    </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email *</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="john@example.com"
+                    value={store.contactEmail}
+                    onChange={(e) => store.setContactEmail(e.target.value)}
+                    className={errors.contact_email ? "border-red-400" : ""}
+                  />
+                  {errors.contact_email && (
+                    <p className="text-xs text-red-500">{errors.contact_email}</p>
                   )}
                 </div>
 
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-700">
-                  <strong>Pricing:</strong> A flat rate will be determined by
-                  our team and sent to you as a personalized quote. You&apos;ll
-                  be able to pay securely online once you approve the quote.
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Phone *</Label>
+                  <Input
+                    id="phone"
+                    type="tel"
+                    placeholder="+1 (242) 123-4567"
+                    value={store.contactPhone}
+                    onChange={(e) => store.setContactPhone(e.target.value)}
+                    className={errors.contact_phone ? "border-red-400" : ""}
+                  />
+                  {errors.contact_phone && (
+                    <p className="text-xs text-red-500">{errors.contact_phone}</p>
+                  )}
                 </div>
 
-                {store.error && (
-                  <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-600">
-                    {store.error}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Navigation Buttons */}
-            <div className="flex items-center justify-between mt-8 pt-6 border-t border-ocean-100">
-              {store.currentStep > 0 ? (
-                <Button variant="outline" onClick={prevStep}>
-                  <ChevronLeft className="h-4 w-4 mr-1" />
-                  Back
-                </Button>
-              ) : (
-                <div />
-              )}
-
-              {store.currentStep < 4 ? (
-                <Button variant="cta" onClick={nextStep}>
-                  Continue
-                  <ChevronRight className="h-4 w-4 ml-1" />
-                </Button>
-              ) : (
-                <Button
-                  variant="cta"
-                  onClick={handleSubmit}
-                  disabled={store.isSubmitting}
-                >
-                  {store.isSubmitting ? (
-                    <span className="flex items-center gap-2">
-                      <svg
-                        className="animate-spin h-4 w-4"
-                        viewBox="0 0 24 24"
-                      >
-                        <circle
-                          className="opacity-25"
-                          cx="12"
-                          cy="12"
-                          r="10"
-                          stroke="currentColor"
-                          strokeWidth="4"
-                          fill="none"
-                        />
-                        <path
-                          className="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                        />
-                      </svg>
-                      Submitting...
+                {/* Summary */}
+                <div className="bg-ocean-50 rounded-lg p-4 space-y-2 text-sm">
+                  <h4 className="font-semibold text-ocean-900">Request Summary</h4>
+                  <div className="grid grid-cols-2 gap-y-1 text-ocean-600">
+                    <span className="text-ocean-400">Party:</span>
+                    <span>
+                      {store.adultCount} adult{store.adultCount !== 1 ? "s" : ""}
+                      {store.childCount > 0 && `, ${store.childCount} child${store.childCount !== 1 ? "ren" : ""}`}
+                      {store.infantCount > 0 && `, ${store.infantCount} infant${store.infantCount !== 1 ? "s" : ""}`}
                     </span>
-                  ) : (
-                    <>
-                      <Sparkles className="h-4 w-4 mr-1" />
-                      Submit Request
-                    </>
-                  )}
-                </Button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+                    <span className="text-ocean-400">Preferred dates:</span>
+                    <span>
+                      {store.preferredDates.map((d, i) => (
+                        <span key={i}>
+                          {format(new Date(d.date + "T12:00:00"), "MMM d")}
+                          {i < store.preferredDates.length - 1 ? ", " : ""}
+                        </span>
+                      ))}
+                    </span>
+                    {store.hasOccasion && store.occasionDetails && (
+                      <>
+                        <span className="text-ocean-400">Occasion:</span>
+                        <span>{store.occasionDetails}</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex justify-between">
+                  <Button variant="outline" onClick={() => store.prevStep()}>
+                    <ChevronLeft className="mr-2 h-4 w-4" />
+                    Back
+                  </Button>
+                  <Button
+                    variant="cta"
+                    disabled={store.isSubmitting}
+                    onClick={handleSubmit}
+                  >
+                    {store.isSubmitting ? (
+                      <>
+                        <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
+                        Submitting...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="mr-2 h-4 w-4" />
+                        Submit Request
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        {/* Info box */}
+        <div className="max-w-xl mx-auto mt-8">
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800">
+            <p className="font-medium mb-1">How it works:</p>
+            <ol className="list-decimal list-inside space-y-1 text-amber-700">
+              <li>Submit your private tour request with preferred dates</li>
+              <li>We review and send you a custom quote within 24 hours</li>
+              <li>Confirm your date, time, and pay securely online</li>
+              <li>Enjoy your exclusive private tour! 🚤</li>
+            </ol>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-export default function PrivateTourPage() {
-  return <PrivateTourForm />;
-}
+export default PrivateTourPage;

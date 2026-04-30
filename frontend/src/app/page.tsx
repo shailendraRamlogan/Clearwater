@@ -63,6 +63,16 @@ export default function HomePage() {
                   <ChevronRight className="ml-2 h-5 w-5" />
                 </Button>
               </Link>
+              <Link href="/book/private-tour">
+                <Button
+                  variant="outline"
+                  size="xl"
+                  className="w-full sm:w-auto border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+                >
+                  <Sparkles className="mr-2 h-5 w-5" />
+                  Private Tour
+                </Button>
+              </Link>
               <Button
                 variant="outline"
                 size="xl"
