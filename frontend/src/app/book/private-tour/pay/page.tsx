@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { loadStripe } from "@stripe/stripe-js";
 import {
@@ -250,6 +250,20 @@ function PaymentForm({ tour }: { tour: PrivateTourRequest }) {
 }
 
 export default function PrivateTourPayPage() {
+  return (
+    <React.Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center -mt-16">
+          <Loader2 className="h-8 w-8 animate-spin text-ocean-500" />
+        </div>
+      }
+    >
+      <PrivateTourPayContent />
+    </React.Suspense>
+  );
+}
+
+function PrivateTourPayContent() {
   const searchParams = useSearchParams();
   const ref = searchParams.get("ref");
   const [tour, setTour] = useState<PrivateTourRequest | null>(null);
