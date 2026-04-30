@@ -114,7 +114,7 @@ function PrivateTourForm() {
         occasion_details: store.hasOccasion
           ? store.occasionDetails
           : undefined,
-        preferred_dates: store.preferredDates.map((d, i) => ({
+        preferred_dates: store.preferredDates.map((d) => ({
           date: d.date,
           time_preference: d.time_preference,
         })),
