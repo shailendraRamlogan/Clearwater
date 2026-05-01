@@ -280,7 +280,7 @@ class PrivateTourRequestResource extends Resource
                     ->copyable(),
                 Tables\Columns\TextColumn::make('contact_name')
                     ->label('Contact')
-                    ->formatStateUsing(fn ($record) => $record->contact_first_name . ' ' . $record->contact_last_name)
+                    ->state(fn ($record) => $record->contact_first_name . ' ' . $record->contact_last_name)
                     ->description(fn ($record) => trim(
                         $record->contact_email . ($record->contact_phone ? ' · ' . $record->contact_phone : '')
                     ))
@@ -296,7 +296,7 @@ class PrivateTourRequestResource extends Resource
                     ->searchable(),
                 Tables\Columns\TextColumn::make('total_guests')
                     ->label('Guests')
-                    ->state(fn ($record) => ($record->adult_count + $record->child_count + $record->infant_count) . ' guests')
+                    ->state(fn ($record) => ($record->guests->filter(fn ($g) => !empty($g->first_name) && !empty($g->last_name))->count()) . ' / ' . ($record->adult_count + $record->child_count + $record->infant_count))
                     ->badge()
                     ->color(function ($record) {
                         $total = $record->adult_count + $record->child_count + $record->infant_count;
