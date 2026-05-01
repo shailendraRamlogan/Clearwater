@@ -348,18 +348,7 @@ class PrivateTourRequestResource extends Resource
                 Tables\Actions\EditAction::make()
                     ->visible(fn ($record) => in_array($record->status, [PrivateTourRequest::STATUS_REQUESTED])),
                 Tables\Actions\Action::make('confirm')
-                    ->label(function ($record) {
-                        $total = $record->adult_count + $record->child_count + $record->infant_count;
-                        $completed = $record->guests->filter(fn ($g) => !empty($g->first_name) && !empty($g->last_name))->count();
-                        $tourReady = !empty($record->confirmed_tour_date) && !empty($record->confirmed_start_time) && !empty($record->confirmed_end_time) && !empty($record->total_price_cents);
-                        if ($completed >= $total && $tourReady) return 'Send Quote';
-                        $missing = [];
-                        if ($completed < $total) $missing[] = "{$completed}/{$total} guests";
-                        if (empty($record->confirmed_tour_date)) $missing[] = 'no date';
-                        if (empty($record->confirmed_start_time) || empty($record->confirmed_end_time)) $missing[] = 'no time';
-                        if (empty($record->total_price_cents)) $missing[] = 'no price';
-                        return "Send Quote\n" . implode(', ', $missing);
-                    })
+                    ->label('Send Quote')
                     ->icon('heroicon-o-check-circle')
                     ->color('success')
                     ->visible(fn ($record) => $record->status === PrivateTourRequest::STATUS_REQUESTED)
