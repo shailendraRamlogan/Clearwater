@@ -98,10 +98,25 @@ class EmailService
 
     private function buildReceiptHtml(Booking $booking, bool $guestsComplete = false): string
     {
+        $booking->loadMissing(['primaryGuest', 'timeSlot.boat', 'items', 'addons.addon', 'guests']);
         $guest = $booking->primaryGuest;
-        $boat = $booking->timeSlot->boat;
+        $isPrivate = $booking->source_type === 'private';
+
+        if (!$guest || !config('services.resend.key')) {
+            return '';
+        }
+
         $date = \Illuminate\Support\Carbon::parse($booking->tour_date)->format('l, F j, Y');
-        $time = \Illuminate\Support\Carbon::parse($booking->timeSlot->start_time)->format('g:i A') . ' - ' . \Illuminate\Support\Carbon::parse($booking->timeSlot->end_time)->format('g:i A');
+        if ($isPrivate) {
+            $timeDisplay = $booking->special_comment ?? 'TBD';
+            $boatName = 'Private Charter';
+            $guestCount = $booking->guests->count() . ' passengers';
+        } else {
+            $boat = $booking->timeSlot->boat;
+            $timeDisplay = \Illuminate\Support\Carbon::parse($booking->timeSlot->start_time)->format('g:i A') . ' - ' . \Illuminate\Support\Carbon::parse($booking->timeSlot->end_time)->format('g:i A');
+            $boatName = $boat->name;
+            $guestCount = $booking->items->sum('quantity') . ' passengers';
+        }
         $subtotal = '$' . number_format($booking->total_price_cents / 100, 2);
         $fees = '$' . number_format(($booking->fees_cents ?? 0) / 100, 2);
         $grandTotal = '$' . number_format(($booking->total_price_cents + ($booking->fees_cents ?? 0)) / 100, 2);
@@ -111,7 +126,9 @@ class EmailService
         // Build items table
         $itemsHtml = '';
         foreach ($booking->items as $item) {
-            $label = ucfirst($item->ticket_type) . ($item->ticket_type === 'adult' ? ' Ticket' : ' Ticket');
+            $label = $isPrivate
+                ? 'Private Tour'
+                : ucfirst($item->ticket_type) . ' Ticket';
             $price = '$' . number_format($item->unit_price_cents / 100, 2);
             $lineTotal = '$' . number_format(($item->quantity * $item->unit_price_cents) / 100, 2);
             $itemsHtml .= "<tr>
@@ -125,15 +142,29 @@ class EmailService
         // Addons
         foreach ($booking->addons as $addonItem) {
             if ($addonItem->addon) {
-                $price = '$' . number_format($addonItem->unit_price_cents / 100, 2);
-                $lineTotal = '$' . number_format(($addonItem->quantity * $addonItem->unit_price_cents) / 100, 2);
+                $addonTitle = $addonItem->addon->title;
                 $itemsHtml .= "<tr>
-                    <td style=\"padding:10px 12px; border-bottom:1px solid #e5e7eb;\">{$addonItem->addon->title}</td>
-                    <td style=\"padding:10px 12px; border-bottom:1px solid #e5e7eb; text-align:center;\">{$addonItem->quantity}</td>
-                    <td style=\"padding:10px 12px; border-bottom:1px solid #e5e7eb; text-align:right;\">{$price}</td>
-                    <td style=\"padding:10px 12px; border-bottom:1px solid #e5e7eb; text-align:right;\">{$lineTotal}</td>
+                    <td style=\"padding:10px 12px; border-bottom:1px solid #e5e7eb; color:#6b7280;\">&nbsp;&nbsp;✨ {$addonTitle}</td>
+                    <td style=\"padding:10px 12px; border-bottom:1px solid #e5e7eb; text-align:center; color:#6b7280;\">{$addonItem->quantity}</td>
+                    <td style=\"padding:10px 12px; border-bottom:1px solid #e5e7eb; text-align:right; color:#6b7280;\">Included</td>
+                    <td style=\"padding:10px 12px; border-bottom:1px solid #e5e7eb; text-align:right; color:#6b7280;\">—</td>
                 </tr>";
             }
+        }
+
+        // Build guest list
+        $guestListHtml = '';
+        if ($booking->guests->isNotEmpty()) {
+            $guestListHtml = '<tr><td style="padding:24px 32px 0;"><h2 style="margin:0 0 12px; font-size:16px; font-weight:700; color:#111827;">Guests</h2>';
+            $guestListHtml .= '<table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb; border-radius:8px; overflow:hidden;">';
+            $guestListHtml .= '<tr style="background:#f9fafb;"><th style="padding:8px 12px; text-align:left; font-size:12px; font-weight:600; color:#6b7280; text-transform:uppercase; letter-spacing:0.5px;">Name</th><th style="padding:8px 12px; text-align:left; font-size:12px; font-weight:600; color:#6b7280; text-transform:uppercase; letter-spacing:0.5px;">Email</th></tr>';
+            foreach ($booking->guests as $g) {
+                $name = e($g->first_name . ' ' . $g->last_name);
+                $badge = $g->is_primary ? ' <span style="font-size:11px; background:#dbeafe; color:#1e40af; padding:2px 8px; border-radius:9999px; margin-left:4px;">Primary</span>' : '';
+                $email = e($g->email ?: '—');
+                $guestListHtml .= "<tr><td style=\"padding:8px 12px; border-bottom:1px solid #f3f4f6; font-size:14px; color:#374151;\">{$name}{$badge}</td><td style=\"padding:8px 12px; border-bottom:1px solid #f3f4f6; font-size:14px; color:#6b7280;\">{$email}</td></tr>";
+            }
+            $guestListHtml .= '</table></td></tr>';
         }
 
         // Conditional CTA section
@@ -214,18 +245,18 @@ CTA;
                                                 <td style="width:8px;"></td>
                                                 <td style="padding:10px 14px; background:#f9fafb; border-radius:8px; width:50%;">
                                                     <p style="margin:0; font-size:12px; color:#6b7280;">Time</p>
-                                                    <p style="margin:4px 0 0; font-size:15px; font-weight:600; color:#111827;">{$time}</p>
+                                                    <p style="margin:4px 0 0; font-size:15px; font-weight:600; color:#111827;">{$timeDisplay}</p>
                                                 </td>
                                             </tr>
                                             <tr>
                                                 <td style="padding:10px 14px; background:#f9fafb; border-radius:8px; width:50%; margin-top:8px; display:inline-block;">
                                                     <p style="margin:0; font-size:12px; color:#6b7280;">Boat</p>
-                                                    <p style="margin:4px 0 0; font-size:15px; font-weight:600; color:#111827;">{$boat->name}</p>
+                                                    <p style="margin:4px 0 0; font-size:15px; font-weight:600; color:#111827;">{$boatName}</p>
                                                 </td>
                                                 <td style="width:8px;"></td>
                                                 <td style="padding:10px 14px; background:#f9fafb; border-radius:8px; width:50%; margin-top:8px; display:inline-block;">
                                                     <p style="margin:0; font-size:12px; color:#6b7280;">Guests</p>
-                                                    <p style="margin:4px 0 0; font-size:15px; font-weight:600; color:#111827;">{$booking->items->sum('quantity')} passengers</p>
+                                                    <p style="margin:4px 0 0; font-size:15px; font-weight:600; color:#111827;">{$guestCount}</p>
                                                 </td>
                                             </tr>
                                         </table>
@@ -269,6 +300,8 @@ CTA;
                         </td>
                     </tr>
 
+                    {$guestListHtml}
+
                     {$ctaHtml}
 
                     <!-- Footer -->
@@ -294,10 +327,19 @@ HTML;
 
     private function buildTicketHtml(Booking $booking, string $downloadUrl): string
     {
+        $booking->loadMissing(['primaryGuest', 'timeSlot.boat']);
         $guest = $booking->primaryGuest;
-        $boat = $booking->timeSlot->boat;
+        $isPrivate = $booking->source_type === 'private';
         $date = $booking->tour_date->format('F j, Y');
-        $time = \Carbon\Carbon::parse($booking->timeSlot->start_time)->format('g:i A');
+
+        if ($isPrivate) {
+            $boatName = 'Private Charter';
+            $timeDisplay = $booking->special_comment ?? 'TBD';
+        } else {
+            $boat = $booking->timeSlot->boat;
+            $boatName = $boat->name;
+            $timeDisplay = \Carbon\Carbon::parse($booking->timeSlot->start_time)->format('g:i A');
+        }
 
         $itemsHtml = '';
         foreach ($booking->items as $item) {
@@ -330,12 +372,12 @@ HTML;
                             <table width="100%" cellpadding="0" cellspacing="0">
                                 <tr>
                                     <td style="padding:10px 14px; background:#f9fafb; border-radius:8px; width:50%;">
-                                        <p style="margin:0; font-size:12px; color:#6b7280;">{$boat->name}</p>
+                                        <p style="margin:0; font-size:12px; color:#6b7280;">{$boatName}</p>
                                         <p style="margin:4px 0 0; font-size:15px; font-weight:600; color:#111827;">{$date}</p>
                                     </td>
                                     <td style="width:8px;"></td>
                                     <td style="padding:10px 14px; background:#f9fafb; border-radius:8px; width:50%;">
-                                        <p style="margin:0; font-size:12px; color:#6b7280;">{$time}</p>
+                                        <p style="margin:0; font-size:12px; color:#6b7280;">{$timeDisplay}</p>
                                         <p style="margin:4px 0 0; font-size:15px; font-weight:600; color:#111827;">{$guest->first_name} {$guest->last_name}</p>
                                     </td>
                                 </tr>
