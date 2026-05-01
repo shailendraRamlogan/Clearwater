@@ -21,7 +21,7 @@ class EditPrivateTourRequest extends EditRecord
     protected function mutateFormDataBeforeFill(array $data): array
     {
         $record = $this->getRecord();
-        $record->load('guests');
+        $record->load(['guests', 'addons']);
 
         // If no guests exist yet, create the primary guest from contact info
         // so the relationship repeater picks it up

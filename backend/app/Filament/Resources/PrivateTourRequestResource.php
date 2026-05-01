@@ -190,7 +190,7 @@ class PrivateTourRequestResource extends Resource
                                     ->pluck('title', 'id')
                                     ->toArray();
                             })
-                            ->default(function ($record) {
+                            ->formatStateUsing(function ($record) {
                                 if (!$record) return [];
                                 return $record->addons->pluck('addon_id')->toArray();
                             })
