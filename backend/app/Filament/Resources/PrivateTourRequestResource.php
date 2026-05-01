@@ -358,7 +358,7 @@ class PrivateTourRequestResource extends Resource
                         $tourReady = !empty($record->confirmed_tour_date) && !empty($record->confirmed_start_time) && !empty($record->confirmed_end_time) && !empty($record->total_price_cents);
                         return $completed < $total || !$tourReady;
                     })
-                    ->tooltip(function ($record) {
+                    ->extraAttributes(function ($record) {
                         $total = $record->adult_count + $record->child_count + $record->infant_count;
                         $completed = $record->guests->filter(fn ($g) => !empty($g->first_name) && !empty($g->last_name))->count();
                         $tourReady = !empty($record->confirmed_tour_date) && !empty($record->confirmed_start_time) && !empty($record->confirmed_end_time) && !empty($record->total_price_cents);
@@ -368,9 +368,9 @@ class PrivateTourRequestResource extends Resource
                         if (empty($record->confirmed_start_time) || empty($record->confirmed_end_time)) $missing[] = 'start/end time';
                         if (empty($record->total_price_cents)) $missing[] = 'price';
                         if (count($missing) > 0) {
-                            return 'Fill in: ' . implode(', ', $missing);
+                            return ['title' => 'Fill in: ' . implode(', ', $missing)];
                         }
-                        return null;
+                        return [];
                     })
                     ->form([
                         Forms\Components\DatePicker::make('confirmed_tour_date')
