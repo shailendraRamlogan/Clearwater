@@ -43,4 +43,28 @@ class EditPrivateTourRequest extends EditRecord
     {
         return $this->getResource()::getUrl('index');
     }
+
+    protected function afterSave(): void
+    {
+        $record = $this->getRecord();
+        $selectedAddonIds = $this->data['selected_addon_ids'] ?? [];
+
+        // Get currently attached addon IDs
+        $currentAddonIds = $record->addons()->pluck('addon_id')->toArray();
+
+        // Addons to remove
+        $toRemove = array_diff($currentAddonIds, $selectedAddonIds);
+        foreach ($toRemove as $addonId) {
+            $record->addons()->where('addon_id', $addonId)->delete();
+        }
+
+        // Addons to add
+        $toAdd = array_diff($selectedAddonIds, $currentAddonIds);
+        foreach ($toAdd as $addonId) {
+            $record->addons()->create([
+                'addon_id' => $addonId,
+                'unit_price_cents' => null,
+            ]);
+        }
+    }
 }

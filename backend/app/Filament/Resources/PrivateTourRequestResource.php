@@ -179,27 +179,33 @@ class PrivateTourRequestResource extends Resource
                     ->columns(1),
 
                 // Selected Addons
-                Forms\Components\Section::make('Selected Add-ons')
+                Forms\Components\Section::make('Add-ons')
                     ->schema([
-                        Forms\Components\Placeholder::make('addons_display')
-                            ->label('')
-                            ->visible(fn ($record) => $record && $record->addons->isNotEmpty())
-                            ->content(function ($record) {
-                                $items = $record->addons->map(function ($pta) {
-                                    $title = e($pta->addon->title ?? 'Unknown Addon');
-                                    $price = $pta->unit_price_cents !== null
-                                        ? '$' . number_format($pta->unit_price_cents / 100, 2)
-                                        : '—';
-                                    return "<span style=\"display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid #f3f4f6; font-size:14px;\"><span>{$title}</span><span style=\"font-weight:500; color:#0d9488;\">{$price}</span></span>";
-                                })->join('');
-                                return new \Illuminate\Support\HtmlString($items);
+                        Forms\Components\CheckboxList::make('selected_addon_ids')
+                            ->label('Toggle add-ons on/off for this booking')
+                            ->options(function ($record) {
+                                return \App\Models\Addon::active()
+                                    ->forPrivateTours()
+                                    ->orderBy('sort_order')
+                                    ->pluck('title', 'id')
+                                    ->toArray();
+                            })
+                            ->default(function ($record) {
+                                if (!$record) return [];
+                                return $record->addons->pluck('addon_id')->toArray();
+                            })
+                            ->columns(1)
+                            ->bulkToggleable()
+                            ->dehydrated(false)
+                            ->live()
+                            ->afterStateUpdated(function () {
+                                // Trigger reactive updates
                             }),
-                        Forms\Components\Placeholder::make('no_addons')
+                        Forms\Components\Placeholder::make('addon_note')
                             ->label('')
-                            ->visible(fn ($record) => $record && $record->addons->isEmpty())
-                            ->content('No add-ons selected by the customer.'),
+                            ->content('Prices for each add-on are set when sending the quote.'),
                     ])
-                    ->collapsed(fn ($record) => !$record || $record->addons->isEmpty()),
+                    ->visible(fn ($record) => $record && in_array($record?->status, [PrivateTourRequest::STATUS_REQUESTED])),
 
                 // Guest Information
                 Forms\Components\Section::make('Guest Information')
