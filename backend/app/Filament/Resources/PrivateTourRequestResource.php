@@ -298,7 +298,7 @@ class PrivateTourRequestResource extends Resource
                     ->label('Guests')
                     ->state(fn ($record) => ($record->adult_count + $record->child_count + $record->infant_count) . ' guests')
                     ->badge()
-                    ->color(fn ($record) => {
+                    ->color(function ($record) {
                         $total = $record->adult_count + $record->child_count + $record->infant_count;
                         $completed = $record->guests->filter(fn ($g) => !empty($g->first_name) && !empty($g->last_name))->count();
                         if ($completed >= $total) return 'success';
