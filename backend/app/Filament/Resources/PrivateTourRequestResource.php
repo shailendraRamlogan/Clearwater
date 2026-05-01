@@ -392,17 +392,20 @@ class PrivateTourRequestResource extends Resource
                             ->label('Confirmed Tour Date')
                             ->closeOnDateSelection()
                             ->minDate(today())
-                            ->required(),
+                            ->required()
+                            ->default(fn ($record) => $record?->confirmed_tour_date),
                         Forms\Components\Grid::make(2)
                             ->schema([
                                 Forms\Components\TextInput::make('confirmed_start_time')
                                     ->label('Start Time')
                                     ->type('time')
-                                    ->required(),
+                                    ->required()
+                                    ->default(fn ($record) => $record?->confirmed_start_time ? substr($record->confirmed_start_time, 0, 5) : null),
                                 Forms\Components\TextInput::make('confirmed_end_time')
                                     ->label('End Time')
                                     ->type('time')
-                                    ->required(),
+                                    ->required()
+                                    ->default(fn ($record) => $record?->confirmed_end_time ? substr($record->confirmed_end_time, 0, 5) : null),
                             ]),
                         Forms\Components\TextInput::make('total_price_dollars')
                             ->label('Total Price ($)')
@@ -411,6 +414,7 @@ class PrivateTourRequestResource extends Resource
                             ->step(0.01)
                             ->prefix('$')
                             ->required()
+                            ->default(fn ($record) => $record?->total_price_cents ? $record->total_price_cents / 100 : null)
                             ->helperText('Flat total price including all add-ons. Fees calculated automatically.'),
                         Forms\Components\Repeater::make('addon_prices')
                             ->label('Add-on Prices (for itemized display)')
