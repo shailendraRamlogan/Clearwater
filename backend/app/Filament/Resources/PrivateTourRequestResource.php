@@ -389,115 +389,83 @@ class PrivateTourRequestResource extends Resource
                         return $completed < $total || !$tourReady;
                     })
                     ->form([
-                        Forms\Components\DatePicker::make('confirmed_tour_date')
-                            ->label('Confirmed Tour Date')
-                            ->closeOnDateSelection()
-                            ->minDate(today())
-                            ->required()
-                            ->default(fn ($record) => $record?->confirmed_tour_date),
-                        Forms\Components\Grid::make(2)
-                            ->schema([
-                                Forms\Components\TextInput::make('confirmed_start_time')
-                                    ->label('Start Time')
-                                    ->type('time')
-                                    ->required()
-                                    ->default(fn ($record) => $record?->confirmed_start_time ? substr($record->confirmed_start_time, 0, 5) : null),
-                                Forms\Components\TextInput::make('confirmed_end_time')
-                                    ->label('End Time')
-                                    ->type('time')
-                                    ->required()
-                                    ->default(fn ($record) => $record?->confirmed_end_time ? substr($record->confirmed_end_time, 0, 5) : null),
-                            ]),
-                        Forms\Components\TextInput::make('total_price_dollars')
-                            ->label('Total Price ($)')
-                            ->numeric()
-                            ->minValue(0)
-                            ->step(0.01)
-                            ->prefix('$')
-                            ->required()
-                            ->default(fn ($record) => $record?->total_price_cents ? $record->total_price_cents / 100 : null)
-                            ->helperText('Flat total price including all add-ons. Fees calculated automatically.'),
-                        Forms\Components\Placeholder::make('selected_addons')
-                            ->label('Selected Add-ons')
-                            ->visible(fn ($record) => $record && $record->addons->isNotEmpty())
+                        Forms\Components\Placeholder::make('summary')
+                            ->label('')
                             ->dehydrated(false)
                             ->content(function ($record) {
-                                $items = $record->addons->map(function ($pta) {
-                                    $title = e($pta->addon->title ?? 'Unknown Addon');
-                                    return "<div style=\"padding:6px 0; border-bottom:1px solid #f3f4f6; font-size:14px; color:#374151;\">✨ {$title}</div>";
-                                })->join('');
-                                return new \Illuminate\Support\HtmlString($items);
-                            }),
-                        Forms\Components\Textarea::make('admin_notes')
-                            ->label('Admin Notes')
-                            ->rows(1)
-                            ->maxLength(1000),
-                        Forms\Components\Repeater::make('guests')
-                            ->label('Guest Information')
-                            ->default(function ($record) {
-                                if (!$record) return [];
-                                if ($record->guests->isEmpty()) {
-                                    return [[
-                                        'first_name' => $record->contact_first_name,
-                                        'last_name' => $record->contact_last_name,
-                                        'email' => $record->contact_email,
-                                        'phone' => $record->contact_phone,
-                                        'is_primary' => true,
-                                    ]];
+                                $guestCount = $record->adult_count . ' adult' . ($record->adult_count !== 1 ? 's' : '');
+                                if ($record->child_count > 0) {
+                                    $guestCount .= ', ' . $record->child_count . ' child' . ($record->child_count !== 1 ? 'ren' : '');
                                 }
-                                return $record->guests->map(fn ($g) => [
-                                    'first_name' => $g->first_name,
-                                    'last_name' => $g->last_name,
-                                    'email' => $g->email,
-                                    'phone' => $g->phone,
-                                    'is_primary' => $g->is_primary,
-                                ])->toArray();
-                            })
-                            ->schema([
-                                Forms\Components\Grid::make(2)
-                                    ->schema([
-                                        Forms\Components\TextInput::make('first_name')->required()->maxLength(100),
-                                        Forms\Components\TextInput::make('last_name')->required()->maxLength(100),
-                                    ]),
-                                Forms\Components\Grid::make(2)
-                                    ->schema([
-                                        Forms\Components\TextInput::make('email')->email()->maxLength(255),
-                                        Forms\Components\TextInput::make('phone')->maxLength(30)->label('Phone'),
-                                    ]),
-                                Forms\Components\Checkbox::make('is_primary')
-                                    ->label('Primary Contact')
-                                    ->default(false),
-                            ])
-                            ->columnSpanFull()
-                            ->addActionLabel('Add Guest')
-                            ->required()
-                            ->minItems(1),
-                    ])
-                    ->action(function (PrivateTourRequest $record, array $data): void {
-                        $totalPriceCents = (int) round(($data['total_price_dollars'] ?? 0) * 100);
-                        $feeService = app(FeeService::class);
-                        $feeResult = $feeService->calculateFees($totalPriceCents);
+                                if ($record->infant_count > 0) {
+                                    $guestCount .= ', ' . $record->infant_count . ' infant' . ($record->infant_count !== 1 ? 's' : '');
+                                }
 
+                                $dateStr = $record->confirmed_tour_date
+                                    ? \Carbon\Carbon::parse($record->confirmed_tour_date)->format('F j, Y')
+                                    : '—';
+                                $startTime = $record->confirmed_start_time
+                                    ? \Carbon\Carbon::parse($record->confirmed_start_time)->format('g:i A')
+                                    : '—';
+                                $endTime = $record->confirmed_end_time
+                                    ? \Carbon\Carbon::parse($record->confirmed_end_time)->format('g:i A')
+                                    : '—';
+                                $price = $record->total_price_cents
+                                    ? '$' . number_format($record->total_price_cents / 100, 2)
+                                    : '—';
+                                $fees = $record->fees_cents
+                                    ? '$' . number_format($record->fees_cents / 100, 2)
+                                    : '$0.00';
+                                $grandTotal = '$' . number_format(($record->total_price_cents + $record->fees_cents) / 100, 2);
+
+                                // Guest list
+                                $guestHtml = '';
+                                $primary = $record->guests->firstWhere('is_primary', true);
+                                if ($primary) {
+                                    $guestHtml .= "<div style=\"padding:6px 0; border-bottom:1px solid #f3f4f6; font-size:14px;\"><strong>" . e($primary->first_name . ' ' . $primary->last_name) . '</strong> <span style=\"color:#6b7280; font-size:12px;\">(Primary)</span></div>';
+                                }
+                                foreach ($record->guests->where('is_primary', false) as $g) {
+                                    $guestHtml .= "<div style=\"padding:6px 0; border-bottom:1px solid #f3f4f6; font-size:14px; color:#374151;\">" . e($g->first_name . ' ' . $g->last_name) . '</div>';
+                                }
+
+                                // Addons
+                                $addonHtml = '';
+                                if ($record->addons->isNotEmpty()) {
+                                    $addonHtml = '<div style="margin-top:12px;">';
+                                    $addonHtml .= '<div style="font-size:11px; font-weight:600; color:#6b7280; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">Add-ons</div>';
+                                    foreach ($record->addons as $pta) {
+                                        $addonHtml .= "<div style=\"padding:4px 0; font-size:13px; color:#374151;\">✨ " . e($pta->addon->title ?? 'Add-on') . '</div>';
+                                    }
+                                    $addonHtml .= '</div>';
+                                }
+
+                                $html = <<<HTML
+<div style="font-size:14px; color:#374151; line-height:1.6;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb; border-radius:8px; overflow:hidden; margin-bottom:16px;">
+        <tr style="background:#f9fafb;"><td style="padding:8px 14px; font-size:12px; font-weight:600; color:#6b7280; text-transform:uppercase; letter-spacing:0.5px;">Tour Details</td></tr>
+        <tr><td style="padding:8px 14px; border-bottom:1px solid #f3f4f6;"><strong>Date</strong><span style="float:right;">{$dateStr}</span></td></tr>
+        <tr><td style="padding:8px 14px; border-bottom:1px solid #f3f4f6;"><strong>Time</strong><span style="float:right;">{$startTime} — {$endTime}</span></td></tr>
+        <tr><td style="padding:8px 14px; border-bottom:1px solid #f3f4f6;"><strong>Guests</strong><span style="float:right;">{$guestCount}</span></td></tr>
+        <tr><td style="padding:8px 14px; border-bottom:1px solid #f3f4f6;"><strong>Tour Price</strong><span style="float:right; font-weight:600;">{$price}</span></td></tr>
+        <tr><td style="padding:8px 14px; border-bottom:1px solid #f3f4f6;"><strong>Processing Fee</strong><span style="float:right; color:#6b7280;">{$fees}</span></td></tr>
+        <tr style="background:#f0fdfa;"><td style="padding:10px 14px; font-weight:700; color:#0d9488;"><strong>Grand Total</strong><span style="float:right;">{$grandTotal}</span></td></tr>
+    </table>
+    <div style="font-size:11px; font-weight:600; color:#6b7280; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">Guests ({$record->guests->count()})</div>
+    {$guestHtml}
+    {$addonHtml}
+</div>
+HTML;
+                                return new \Illuminate\Support\HtmlString($html);
+                            }),
+                    ])
+                    ->action(function (PrivateTourRequest $record): void {
+                        // Recalculate fees
+                        $feeService = app(FeeService::class);
+                        $feeResult = $feeService->calculateFees($record->total_price_cents);
                         $record->update([
                             'status' => PrivateTourRequest::STATUS_AWAITING_PAYMENT,
-                            'confirmed_tour_date' => $data['confirmed_tour_date'],
-                            'confirmed_start_time' => ($data['confirmed_start_time'] ?? null) ? $data['confirmed_start_time'] . ':00' : null,
-                            'confirmed_end_time' => ($data['confirmed_end_time'] ?? null) ? $data['confirmed_end_time'] . ':00' : null,
-                            'total_price_cents' => $totalPriceCents,
                             'fees_cents' => $feeResult['total_fees_cents'],
-                            'admin_notes' => $data['admin_notes'] ?? null,
                         ]);
-
-                        $record->guests()->delete();
-                        foreach ($data['guests'] as $guest) {
-                            $record->guests()->create([
-                                'first_name' => $guest['first_name'],
-                                'last_name' => $guest['last_name'],
-                                'email' => $guest['email'] ?? null,
-                                'phone' => ($guest['is_primary'] ?? false) ? ($guest['phone'] ?? null) : null,
-                                'is_primary' => $guest['is_primary'] ?? false,
-                            ]);
-                        }
 
                         try {
                             app(EmailService::class)->sendPrivateTourConfirmed($record->fresh()->load(['guests', 'addons.addon']));
