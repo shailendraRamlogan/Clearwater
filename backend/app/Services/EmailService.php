@@ -535,8 +535,10 @@ HTML;
             return;
         }
 
+        $request->loadMissing('addons.addon');
         $firstName = $request->contact_first_name;
         $datesHtml = $this->buildPreferredDatesHtml($request);
+        $addonsHtml = $this->buildAddonsHtml($request);
         $guestCount = $request->totalGuests() . ' guest' . ($request->totalGuests() !== 1 ? 's' : '');
         if ($request->infant_count > 0) {
             $guestCount .= ' + ' . $request->infant_count . ' infant' . ($request->infant_count !== 1 ? 's' : '');
@@ -587,6 +589,7 @@ HTML;
                                 </tr>
                                 <tr><td style="padding:10px 14px; border-bottom:1px solid #f3f4f6; color:#6b7280; font-size:14px;">Guests</td><td style="padding:10px 14px; border-bottom:1px solid #f3f4f6; text-align:right; font-size:14px; font-weight:600;">{$guestCount}</td></tr>
                                 {$datesHtml}
+                                {$addonsHtml}
                             </table>
                         </td>
                     </tr>
@@ -805,6 +808,20 @@ HTML;
                 'status' => 'failed',
             ]);
         }
+    }
+
+    private function buildAddonsHtml(PrivateTourRequest $request): string
+    {
+        if ($request->addons->isEmpty()) {
+            return '';
+        }
+
+        $html = '<tr style="background:#f9fafb;"><th style="padding:10px 14px; text-align:left; font-size:12px; font-weight:600; color:#6b7280; text-transform:uppercase; letter-spacing:0.5px;" colspan="2">Requested Add-ons</th></tr>';
+        foreach ($request->addons as $pta) {
+            $title = e($pta->addon->title ?? 'Add-on');
+            $html .= "<tr><td style=\"padding:10px 14px; border-bottom:1px solid #f3f4f6; font-size:14px; color:#374151;\">✨ {$title}</td><td style=\"padding:10px 14px; border-bottom:1px solid #f3f4f6; text-align:right; font-size:14px; color:#6b7280;\">Included</td></tr>";
+        }
+        return $html;
     }
 
     private function buildPreferredDatesHtml(PrivateTourRequest $request): string
