@@ -42,10 +42,7 @@ class EmailService
                 'status' => 'sent',
             ]);
 
-            // Send separate ticket email if all guests are complete
-            if ($allComplete) {
-                $this->sendTicketEmail($booking);
-            }
+            // Ticket download link is included in the receipt email above; no separate ticket email needed
         } catch (\Exception $e) {
             EmailLog::create([
                 'booking_id' => $booking->id,
