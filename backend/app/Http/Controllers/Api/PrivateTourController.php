@@ -287,10 +287,11 @@ class PrivateTourController extends Controller
 
         // Convert to regular booking
         $booking = DB::transaction(function () use ($privateTourRequest, $validated) {
-            // Create the regular booking (no time_slot_id for private tours)
+            // Create the regular booking (use first time slot as placeholder for private tours)
+            $timeSlotId = \App\Models\TimeSlot::first()?->id;
             $booking = Booking::create([
                 'tour_date' => $privateTourRequest->confirmed_tour_date,
-                'time_slot_id' => null,
+                'time_slot_id' => $timeSlotId,
                 'status' => 'confirmed',
                 'source_type' => 'private',
                 'photo_upgrade_count' => 0,
