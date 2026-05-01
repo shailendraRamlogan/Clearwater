@@ -348,7 +348,7 @@ class PrivateTourRequestResource extends Resource
                 Tables\Actions\EditAction::make()
                     ->visible(fn ($record) => in_array($record->status, [PrivateTourRequest::STATUS_REQUESTED])),
                 Tables\Actions\Action::make('confirm')
-                    ->label('Confirm & Send Quote')
+                    ->label('Send Quote')
                     ->icon('heroicon-o-check-circle')
                     ->color('success')
                     ->visible(fn ($record) => $record->status === PrivateTourRequest::STATUS_REQUESTED)
