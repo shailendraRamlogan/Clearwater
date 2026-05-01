@@ -417,50 +417,17 @@ class PrivateTourRequestResource extends Resource
                             ->required()
                             ->default(fn ($record) => $record?->total_price_cents ? $record->total_price_cents / 100 : null)
                             ->helperText('Flat total price including all add-ons. Fees calculated automatically.'),
-                        Forms\Components\Repeater::make('addon_prices')
-                            ->label('Add-on Prices (for itemized display)')
+                        Forms\Components\Placeholder::make('selected_addons')
+                            ->label('Selected Add-ons')
                             ->visible(fn ($record) => $record && $record->addons->isNotEmpty())
-                            ->default(function ($record) {
-                                if (!$record) return [];
-                                return $record->addons->map(fn ($pta) => [
-                                    'addon_id' => $pta->addon_id,
-                                    'addon_title' => $pta->addon->title ?? 'Unknown',
-                                    'unit_price_dollars' => $pta->unit_price_cents !== null
-                                        ? $pta->unit_price_cents / 100
-                                                : null,
-                                ])->toArray();
-                            })
-                            ->schema([
-                                Forms\Components\Hidden::make('addon_id'),
-                                Forms\Components\TextInput::make('addon_title')
-                                    ->label('Add-on')
-                                    ->disabled()
-                                    ->dehydrated(false),
-                                Forms\Components\TextInput::make('unit_price_dollars')
-                                    ->label('Price ($)')
-                                    ->numeric()
-                                    ->minValue(0)
-                                    ->step(0.01)
-                                    ->prefix('$')
-                                    ->nullable()
-                                    ->helperText('Price shown to customer for itemized breakdown.'),
-                            ])
-                            ->dehydrateStateUsing(function ($state) {
-                                // Convert to keyed array: addon_id => price_cents
-                                $prices = [];
-                                foreach ($state as $item) {
-                                    $prices[$item['addon_id']] = isset($item['unit_price_dollars'])
-                                        ? (int) round((float) $item['unit_price_dollars'] * 100)
-                                        : null;
-                                }
-                                return $prices;
-                            })
-                            ->columnSpanFull()
-                            ->reorderable(false)
-                            ->addActionLabel(false)
-                            ->disableItemCreation()
-                            ->disableItemDeletion()
-                            ->disableItemMovement(),
+                            ->dehydrated(false)
+                            ->content(function ($record) {
+                                $items = $record->addons->map(function ($pta) {
+                                    $title = e($pta->addon->title ?? 'Unknown Addon');
+                                    return "<div style=\"padding:6px 0; border-bottom:1px solid #f3f4f6; font-size:14px; color:#374151;\">✨ {$title}</div>";
+                                })->join('');
+                                return new \Illuminate\Support\HtmlString($items);
+                            }),
                         Forms\Components\Textarea::make('admin_notes')
                             ->label('Admin Notes')
                             ->rows(1)
@@ -511,9 +478,6 @@ class PrivateTourRequestResource extends Resource
                         $feeService = app(FeeService::class);
                         $feeResult = $feeService->calculateFees($totalPriceCents);
 
-                        // Build addon_prices keyed array for the confirm endpoint
-                        $addonPrices = $data['addon_prices'] ?? [];
-
                         $record->update([
                             'status' => PrivateTourRequest::STATUS_AWAITING_PAYMENT,
                             'confirmed_tour_date' => $data['confirmed_tour_date'],
@@ -532,13 +496,6 @@ class PrivateTourRequestResource extends Resource
                                 'email' => $guest['email'] ?? null,
                                 'phone' => ($guest['is_primary'] ?? false) ? ($guest['phone'] ?? null) : null,
                                 'is_primary' => $guest['is_primary'] ?? false,
-                            ]);
-                        }
-
-                        // Save addon prices
-                        foreach ($addonPrices as $addonId => $priceCents) {
-                            $record->addons()->where('addon_id', $addonId)->update([
-                                'unit_price_cents' => $priceCents,
                             ]);
                         }
 
