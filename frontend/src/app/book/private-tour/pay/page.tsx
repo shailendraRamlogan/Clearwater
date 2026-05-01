@@ -177,9 +177,18 @@ function PaymentFormInner() {
                   {request.child_count > 0 && `, ${request.child_count} child${request.child_count !== 1 ? "ren" : ""}`}
                 </span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-ocean-400">Tour Price</span>
-                <span>{formatCurrency((request.total_price_cents ?? 0) / 100)}</span>
+              <div className="border-t border-ocean-200 pt-2 mt-2">
+                <p className="text-xs font-semibold text-ocean-600 uppercase tracking-wider mb-2">Itemized Breakdown</p>
+                <div className="flex justify-between">
+                  <span className="text-ocean-700">Private Tour</span>
+                  <span className="font-medium">{formatCurrency((request.total_price_cents ?? 0) / 100)}</span>
+                </div>
+                {request.addons?.filter((a) => a.unit_price_cents !== null && a.unit_price_cents > 0).map((a) => (
+                  <div key={a.id} className="flex justify-between text-ocean-600">
+                    <span className="pl-3">+ {a.addon?.title ?? "Add-on"}</span>
+                    <span>{formatCurrency((a.unit_price_cents ?? 0) / 100)}</span>
+                  </div>
+                ))}
               </div>
               {(request.fees_cents ?? 0) > 0 && (
                 <div className="flex justify-between">

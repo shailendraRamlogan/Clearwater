@@ -62,6 +62,11 @@ class PrivateTourRequest extends Model
         return $this->hasMany(PrivateTourGuest::class, 'private_tour_request_id');
     }
 
+    public function addons()
+    {
+        return $this->hasMany(PrivateTourAddon::class, 'private_tour_request_id');
+    }
+
     public function booking()
     {
         return $this->hasOne(Booking::class, 'booking_ref', 'booking_ref');

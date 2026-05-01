@@ -5,10 +5,13 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StorePrivateTourRequest;
 use App\Http\Requests\ConfirmPrivateTourRequest;
+use App\Models\Addon;
 use App\Models\Booking;
+use App\Models\BookingAddon;
 use App\Models\BookingGuest;
 use App\Models\BookingItem;
 use App\Models\Payment;
+use App\Models\PrivateTourAddon;
 use App\Models\PrivateTourGuest;
 use App\Models\PrivateTourRequest;
 use App\Services\EmailService;
@@ -43,6 +46,14 @@ class PrivateTourController extends Controller
                 ]);
             }
 
+            // Attach selected addons (no prices yet — admin sets them)
+            foreach ($validated['addon_ids'] ?? [] as $addonId) {
+                $ptr->addons()->create([
+                    'addon_id' => $addonId,
+                    'unit_price_cents' => null,
+                ]);
+            }
+
             return $ptr;
         });
 
@@ -56,13 +67,29 @@ class PrivateTourController extends Controller
         return response()->json([
             'message' => 'Private tour request submitted successfully.',
             'booking_ref' => $privateTourRequest->booking_ref,
-            'request' => $privateTourRequest->load('preferredDates'),
+            'request' => $privateTourRequest->load(['preferredDates', 'addons.addon']),
         ], 201);
+    }
+
+    public function availableAddons()
+    {
+        $addons = Addon::active()
+            ->forPrivateTours()
+            ->orderBy('sort_order')
+            ->get()
+            ->map(fn ($a) => [
+                'id' => $a->id,
+                'title' => $a->title,
+                'description' => $a->description,
+                'icon_name' => $a->icon_name,
+            ]);
+
+        return response()->json(['addons' => $addons]);
     }
 
     public function index(Request $request)
     {
-        $query = PrivateTourRequest::with(['preferredDates', 'guests']);
+        $query = PrivateTourRequest::with(['preferredDates', 'guests', 'addons.addon']);
 
         if ($request->filled('status')) {
             $query->where('status', $request->query('status'));
@@ -75,7 +102,7 @@ class PrivateTourController extends Controller
 
     public function show(PrivateTourRequest $privateTourRequest)
     {
-        $privateTourRequest->load(['preferredDates', 'guests', 'booking']);
+        $privateTourRequest->load(['preferredDates', 'guests', 'addons.addon', 'booking']);
 
         return response()->json([
             'request' => $privateTourRequest,
@@ -117,9 +144,18 @@ class PrivateTourController extends Controller
                     'is_primary' => $guestInput['is_primary'] ?? false,
                 ]);
             }
+
+            // Update addon prices if provided
+            if (isset($validated['addon_prices'])) {
+                foreach ($validated['addon_prices'] as $addonId => $priceCents) {
+                    PrivateTourAddon::where('private_tour_request_id', $privateTourRequest->id)
+                        ->where('addon_id', $addonId)
+                        ->update(['unit_price_cents' => $priceCents !== null ? (int) $priceCents : null]);
+                }
+            }
         });
 
-        $privateTourRequest->refresh()->load(['preferredDates', 'guests']);
+        $privateTourRequest->refresh()->load(['preferredDates', 'guests', 'addons.addon']);
 
         // Send confirmation email
         try {
@@ -281,6 +317,16 @@ class PrivateTourController extends Controller
                 'unit_price_cents' => $privateTourRequest->total_price_cents,
             ]);
 
+            // Copy addons to booking_addons
+            foreach ($privateTourRequest->addons as $privateTourAddon) {
+                BookingAddon::create([
+                    'booking_id' => $booking->id,
+                    'addon_id' => $privateTourAddon->addon_id,
+                    'quantity' => 1,
+                    'unit_price_cents' => $privateTourAddon->unit_price_cents ?? 0,
+                ]);
+            }
+
             // Create payment record
             Payment::create([
                 'booking_id' => $booking->id,
@@ -321,7 +367,7 @@ class PrivateTourController extends Controller
         ]);
 
         $privateTourRequest = PrivateTourRequest::where('booking_ref', $request->query('ref'))
-            ->with(['preferredDates', 'guests'])
+            ->with(['preferredDates', 'guests', 'addons.addon'])
             ->first();
 
         if (!$privateTourRequest) {

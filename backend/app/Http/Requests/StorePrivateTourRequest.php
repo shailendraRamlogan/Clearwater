@@ -21,6 +21,8 @@ class StorePrivateTourRequest extends FormRequest
             'preferred_dates' => 'required|array|min:1|max:5',
             'preferred_dates.*.date' => 'required|date|date_format:Y-m-d',
             'preferred_dates.*.time_preference' => 'required|in:morning,afternoon',
+            'addon_ids' => 'array',
+            'addon_ids.*' => 'string|exists:addons,id',
         ];
     }
 

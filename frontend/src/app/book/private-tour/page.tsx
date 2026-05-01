@@ -18,6 +18,7 @@ import {
   CheckCircle,
   Sun,
   CloudSun,
+  Gift,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -27,7 +28,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { ModernCalendar } from "@/components/ui/calendar";
 import { usePrivateTourStore } from "@/stores/private-tour-store";
-import { createPrivateTourRequest } from "@/lib/private-tour-service";
+import { createPrivateTourRequest, fetchPrivateTourAddons } from "@/lib/private-tour-service";
+import type { AvailableAddon } from "@/types/booking";
 import { toast } from "sonner";
 
 const stepIcons = [Users, Calendar, PartyPopper, User];
@@ -40,10 +42,20 @@ function PrivateTourPage() {
   const [submittedRef, setSubmittedRef] = useState<string | null>(null);
   const [calendarDate, setCalendarDate] = useState<Date | undefined>(undefined);
   const [selectedTimePref, setSelectedTimePref] = useState<"morning" | "afternoon">("morning");
+  const [availableAddons, setAvailableAddons] = useState<AvailableAddon[]>([]);
 
   // Cleanup store on unmount
   useEffect(() => {
     return () => usePrivateTourStore.getState().reset();
+  }, []);
+
+  // Fetch available addons
+  useEffect(() => {
+    fetchPrivateTourAddons()
+      .then(({ addons }) => {
+        setAvailableAddons(addons);
+      })
+      .catch(() => {});
   }, []);
 
   const handleSubmit = async () => {
@@ -69,6 +81,7 @@ function PrivateTourPage() {
           date: d.date,
           time_preference: d.time_preference,
         })),
+        addon_ids: store.selectedAddonIds.length > 0 ? store.selectedAddonIds : undefined,
       });
 
       setSubmittedRef(result.booking_ref);
@@ -455,16 +468,61 @@ function PrivateTourPage() {
             </Card>
           )}
 
-          {/* Step 3: Occasion */}
+          {/* Step 3: Add-ons & Occasion */}
           {store.currentStep === 3 && (
             <Card>
               <CardHeader>
-                <CardTitle className="text-xl sm:text-2xl">Special Occasion?</CardTitle>
+                <CardTitle className="text-xl sm:text-2xl">Add-ons & Extras</CardTitle>
                 <p className="text-ocean-500 text-sm">
-                  Celebrating something? Let us know so we can make it extra special.
+                  Enhance your private tour with these optional add-ons.
                 </p>
               </CardHeader>
               <CardContent className="space-y-6">
+                {/* Add-ons selection */}
+                {availableAddons.length > 0 && (
+                  <div className="space-y-3">
+                    <p className="text-sm font-medium text-ocean-700">Available Add-ons</p>
+                    {availableAddons.map((addon) => {
+                      const isSelected = store.selectedAddonIds.includes(addon.id);
+                      return (
+                        <div
+                          key={addon.id}
+                          onClick={() => store.toggleAddon(addon.id)}
+                          className={`flex items-start gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                            isSelected
+                              ? "border-ocean-700 bg-ocean-50"
+                              : "border-ocean-100 hover:border-ocean-200"
+                          }`}
+                        >
+                          <div
+                            className={`mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${
+                              isSelected
+                                ? "bg-ocean-700 border-ocean-700"
+                                : "border-ocean-300"
+                            }`}
+                          >
+                            {isSelected && (
+                              <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-ocean-900 flex items-center gap-2">
+                              {addon.icon_name && <Gift className="h-4 w-4 text-ocean-500" />}
+                              {addon.title}
+                            </p>
+                            {addon.description && (
+                              <p className="text-sm text-ocean-500 mt-0.5">{addon.description}</p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Occasion section */}
                 <div className="flex items-center justify-between p-4 bg-ocean-50 rounded-lg">
                   <div className="flex items-center gap-3">
                     <PartyPopper className="h-5 w-5 text-ocean-500" />

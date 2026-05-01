@@ -97,6 +97,25 @@ export interface PrivateTourGuest {
   is_primary?: boolean;
 }
 
+export interface PrivateTourAddon {
+  id: string;
+  addon_id: string;
+  unit_price_cents: number | null;
+  addon?: {
+    id: string;
+    title: string;
+    description: string | null;
+    icon_name: string | null;
+  };
+}
+
+export interface AvailableAddon {
+  id: string;
+  title: string;
+  description: string | null;
+  icon_name: string | null;
+}
+
 export interface PrivateTourRequest {
   id: string;
   booking_ref: string;
@@ -117,6 +136,7 @@ export interface PrivateTourRequest {
   fees_cents: number;
   preferredDates: PrivateTourPreferredDate[];
   guests: PrivateTourGuest[];
+  addons?: PrivateTourAddon[];
   created_at: string;
   updated_at: string;
 }

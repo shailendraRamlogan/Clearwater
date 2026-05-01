@@ -22,6 +22,10 @@ interface PrivateTourState {
   occasionDetails: string;
   setOccasionDetails: (text: string) => void;
 
+  // Addons
+  selectedAddonIds: string[];
+  toggleAddon: (id: string) => void;
+
   // Step 4: Contact info
   contactFirstName: string;
   setContactFirstName: (val: string) => void;
@@ -59,6 +63,7 @@ const initialState = {
   preferredDates: [] as PrivateTourPreferredDate[],
   hasOccasion: false,
   occasionDetails: "",
+  selectedAddonIds: [] as string[],
   contactFirstName: "",
   contactLastName: "",
   contactEmail: "",
@@ -105,6 +110,13 @@ export const usePrivateTourStore = create<PrivateTourState>((set, get) => ({
 
   setHasOccasion: (val) => set({ hasOccasion: val, occasionDetails: val ? get().occasionDetails : "" }),
   setOccasionDetails: (text) => set({ occasionDetails: text }),
+
+  toggleAddon: (id) =>
+    set((state) => ({
+      selectedAddonIds: state.selectedAddonIds.includes(id)
+        ? state.selectedAddonIds.filter((a) => a !== id)
+        : [...state.selectedAddonIds, id],
+    })),
 
   setContactFirstName: (val) => set({ contactFirstName: val }),
   setContactLastName: (val) => set({ contactLastName: val }),

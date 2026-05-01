@@ -18,6 +18,7 @@ class Addon extends Model
     protected $casts = [
         "is_active" => "boolean",
         "price_cents" => "integer",
+        "private_price_cents" => "integer",
     ];
 
     protected $appends = ["price_dollars"];
@@ -34,6 +35,11 @@ class Addon extends Model
     public function scopeActive($query)
     {
         return $query->where("is_active", true);
+    }
+
+    public function scopeForPrivateTours($query)
+    {
+        return $query->whereIn('available_for', ['private', 'both']);
     }
 
     public function getPriceDollarsAttribute(): float

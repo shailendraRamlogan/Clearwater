@@ -168,7 +168,7 @@ class PrivateTourRequestResource extends Resource
                             ->prefix('$')
                             ->disabled(fn ($record) => !in_array($record?->status, [PrivateTourRequest::STATUS_REQUESTED]))
                             ->required()
-                            ->helperText('Set the flat total price for this private tour. Fees will be calculated automatically.')
+                            ->helperText('Set the flat total price for this private tour (includes addons). Fees will be calculated automatically.')
                             ->formatStateUsing(fn ($record) => $record?->total_price_cents ? $record->total_price_cents / 100 : null)
                             ->dehydrateStateUsing(fn ($state) => $state !== null ? (int) round((float) $state * 100) : null),
                         Forms\Components\Textarea::make('admin_notes')
@@ -177,6 +177,29 @@ class PrivateTourRequestResource extends Resource
                             ->maxLength(1000),
                     ])
                     ->columns(1),
+
+                // Selected Addons
+                Forms\Components\Section::make('Selected Add-ons')
+                    ->schema([
+                        Forms\Components\Placeholder::make('addons_display')
+                            ->label('')
+                            ->visible(fn ($record) => $record && $record->addons->isNotEmpty())
+                            ->content(function ($record) {
+                                $items = $record->addons->map(function ($pta) {
+                                    $title = e($pta->addon->title ?? 'Unknown Addon');
+                                    $price = $pta->unit_price_cents !== null
+                                        ? '$' . number_format($pta->unit_price_cents / 100, 2)
+                                        : '—';
+                                    return "<span style=\"display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid #f3f4f6; font-size:14px;\"><span>{$title}</span><span style=\"font-weight:500; color:#0d9488;\">{$price}</span></span>";
+                                })->join('');
+                                return new \Illuminate\Support\HtmlString($items);
+                            }),
+                        Forms\Components\Placeholder::make('no_addons')
+                            ->label('')
+                            ->visible(fn ($record) => $record && $record->addons->isEmpty())
+                            ->content('No add-ons selected by the customer.'),
+                    ])
+                    ->collapsed(fn ($record) => !$record || $record->addons->isEmpty()),
 
                 // Guest Information
                 Forms\Components\Section::make('Guest Information')
@@ -273,7 +296,7 @@ class PrivateTourRequestResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
-            ->modifyQueryUsing(fn ($query) => $query->with(['preferredDates', 'guests']))
+            ->modifyQueryUsing(fn ($query) => $query->with(['preferredDates', 'guests', 'addons.addon']))
             ->columns([
                 Tables\Columns\TextColumn::make('booking_ref')
                     ->searchable()
@@ -382,7 +405,51 @@ class PrivateTourRequestResource extends Resource
                             ->step(0.01)
                             ->prefix('$')
                             ->required()
-                            ->helperText('Flat total price. Fees calculated automatically.'),
+                            ->helperText('Flat total price including all add-ons. Fees calculated automatically.'),
+                        Forms\Components\Repeater::make('addon_prices')
+                            ->label('Add-on Prices (for itemized display)')
+                            ->visible(fn ($record) => $record && $record->addons->isNotEmpty())
+                            ->default(function ($record) {
+                                if (!$record) return [];
+                                return $record->addons->map(fn ($pta) => [
+                                    'addon_id' => $pta->addon_id,
+                                    'addon_title' => $pta->addon->title ?? 'Unknown',
+                                    'unit_price_dollars' => $pta->unit_price_cents !== null
+                                        ? $pta->unit_price_cents / 100
+                                                : null,
+                                ])->toArray();
+                            })
+                            ->schema([
+                                Forms\Components\Hidden::make('addon_id'),
+                                Forms\Components\TextInput::make('addon_title')
+                                    ->label('Add-on')
+                                    ->disabled()
+                                    ->dehydrated(false),
+                                Forms\Components\TextInput::make('unit_price_dollars')
+                                    ->label('Price ($)')
+                                    ->numeric()
+                                    ->minValue(0)
+                                    ->step(0.01)
+                                    ->prefix('$')
+                                    ->nullable()
+                                    ->helperText('Price shown to customer for itemized breakdown.'),
+                            ])
+                            ->dehydrateStateUsing(function ($state) {
+                                // Convert to keyed array: addon_id => price_cents
+                                $prices = [];
+                                foreach ($state as $item) {
+                                    $prices[$item['addon_id']] = isset($item['unit_price_dollars'])
+                                        ? (int) round((float) $item['unit_price_dollars'] * 100)
+                                        : null;
+                                }
+                                return $prices;
+                            })
+                            ->columnSpanFull()
+                            ->reorderable(false)
+                            ->addActionLabel(false)
+                            ->disableItemCreation()
+                            ->disableItemDeletion()
+                            ->disableItemMovement(),
                         Forms\Components\Textarea::make('admin_notes')
                             ->label('Admin Notes')
                             ->rows(1)
@@ -433,6 +500,9 @@ class PrivateTourRequestResource extends Resource
                         $feeService = app(FeeService::class);
                         $feeResult = $feeService->calculateFees($totalPriceCents);
 
+                        // Build addon_prices keyed array for the confirm endpoint
+                        $addonPrices = $data['addon_prices'] ?? [];
+
                         $record->update([
                             'status' => PrivateTourRequest::STATUS_CONFIRMED,
                             'confirmed_tour_date' => $data['confirmed_tour_date'],
@@ -454,8 +524,15 @@ class PrivateTourRequestResource extends Resource
                             ]);
                         }
 
+                        // Save addon prices
+                        foreach ($addonPrices as $addonId => $priceCents) {
+                            $record->addons()->where('addon_id', $addonId)->update([
+                                'unit_price_cents' => $priceCents,
+                            ]);
+                        }
+
                         try {
-                            app(EmailService::class)->sendPrivateTourConfirmed($record->fresh()->load('guests'));
+                            app(EmailService::class)->sendPrivateTourConfirmed($record->fresh()->load(['guests', 'addons.addon']));
                         } catch (\Exception $e) {
                             \Log::warning("Private tour confirm email error: " . $e->getMessage());
                         }

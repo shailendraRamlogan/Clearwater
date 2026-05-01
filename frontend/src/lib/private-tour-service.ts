@@ -1,6 +1,7 @@
 import api from "./api";
 import type {
   PrivateTourRequest,
+  AvailableAddon,
 } from "@/types/booking";
 
 interface CreatePrivateTourPayload {
@@ -14,6 +15,7 @@ interface CreatePrivateTourPayload {
   has_occasion: boolean;
   occasion_details?: string;
   preferred_dates: { date: string; time_preference: "morning" | "afternoon" }[];
+  addon_ids?: string[];
 }
 
 export async function createPrivateTourRequest(
@@ -61,5 +63,12 @@ export async function confirmPrivateTourPayment(
     booking_ref: bookingRef,
     payment_intent_id: paymentIntentId,
   });
+  return data;
+}
+
+export async function fetchPrivateTourAddons(): Promise<{
+  addons: AvailableAddon[];
+}> {
+  const { data } = await api.get("/private-tour-addons");
   return data;
 }

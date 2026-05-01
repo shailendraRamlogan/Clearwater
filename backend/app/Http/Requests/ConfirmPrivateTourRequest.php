@@ -20,6 +20,8 @@ class ConfirmPrivateTourRequest extends FormRequest
             'guests.*.email' => 'nullable|email|max:255',
             'guests.*.phone' => 'nullable|string|max:30',
             'guests.*.is_primary' => 'boolean',
+            'addon_prices' => 'array',
+            'addon_prices.*' => 'nullable|integer|min:0',
         ];
     }
 

@@ -626,6 +626,16 @@ HTML;
             $ctaHtml = "<tr><td style=\"padding:24px 32px; text-align:center;\"><a href=\"{$paymentUrl}\" style=\"display:inline-block; background-color:#0d9488; color:#ffffff; padding:14px 40px; border-radius:8px; text-decoration:none; font-weight:600; font-size:16px;\">Pay Now — {$grandTotal}</a><p style=\"margin:12px 0 0; font-size:13px; color:#9ca3af;\">Click to complete your payment and secure your private tour.</p></td></tr>";
         }
 
+        // Build addon rows for pricing table
+        $addonRowsHtml = '';
+        $request->loadMissing('addons.addon');
+        foreach ($request->addons as $pta) {
+            if ($pta->unit_price_cents === null) continue;
+            $addonTitle = e($pta->addon->title ?? 'Add-on');
+            $addonPrice = '$' . number_format($pta->unit_price_cents / 100, 2);
+            $addonRowsHtml .= "<tr><td style=\"padding:10px 14px; border-bottom:1px solid #f3f4f6; font-size:14px; color:#6b7280;\">&nbsp;&nbsp;{$addonTitle}</td><td style=\"padding:10px 14px; border-bottom:1px solid #f3f4f6; text-align:right; font-size:14px; color:#6b7280;\">{$addonPrice}</td></tr>";
+        }
+
         $html = <<<HTML
 <!DOCTYPE html>
 <html>
@@ -673,6 +683,7 @@ HTML;
                             <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb; border-radius:8px; overflow:hidden;">
                                 <tr style="background:#f9fafb;"><th style="padding:10px 14px; text-align:left; font-size:12px; font-weight:600; color:#6b7280; text-transform:uppercase;">Pricing</th><th style="padding:10px 14px; text-align:right; font-size:12px; font-weight:600; color:#6b7280; text-transform:uppercase;">Amount</th></tr>
                                 <tr><td style="padding:10px 14px; border-bottom:1px solid #f3f4f6; font-size:14px;">Tour Price</td><td style="padding:10px 14px; border-bottom:1px solid #f3f4f6; text-align:right; font-size:14px;">{$totalPrice}</td></tr>
+                                {$addonRowsHtml}
                                 <tr><td style="padding:10px 14px; border-bottom:1px solid #f3f4f6; font-size:14px;">Fees</td><td style="padding:10px 14px; border-bottom:1px solid #f3f4f6; text-align:right; font-size:14px;">{$fees}</td></tr>
                                 <tr><td style="padding:10px 14px; font-size:16px; font-weight:700; color:#0d9488;">Total</td><td style="padding:10px 14px; text-align:right; font-size:16px; font-weight:700; color:#0d9488;">{$grandTotal}</td></tr>
                             </table>
