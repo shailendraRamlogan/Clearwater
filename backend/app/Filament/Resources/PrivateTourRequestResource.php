@@ -358,7 +358,7 @@ class PrivateTourRequestResource extends Resource
                         if (empty($record->confirmed_tour_date)) $missing[] = 'no date';
                         if (empty($record->confirmed_start_time) || empty($record->confirmed_end_time)) $missing[] = 'no time';
                         if (empty($record->total_price_cents)) $missing[] = 'no price';
-                        return 'Incomplete: ' . implode(', ', $missing);
+                        return "Send Quote\n" . implode(', ', $missing);
                     })
                     ->icon('heroicon-o-check-circle')
                     ->color('success')
