@@ -11,6 +11,7 @@ class AddonController extends Controller
     {
         return response()->json(
             Addon::active()
+                ->forRegularTours()
                 ->orderBy("sort_order")
                 ->get()
                 ->map(fn ($a) => [

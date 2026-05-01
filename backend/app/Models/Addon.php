@@ -42,6 +42,11 @@ class Addon extends Model
         return $query->whereIn('available_for', ['private', 'both']);
     }
 
+    public function scopeForRegularTours($query)
+    {
+        return $query->whereIn('available_for', ['regular', 'both']);
+    }
+
     public function getPriceDollarsAttribute(): float
     {
         return $this->price_cents / 100;
