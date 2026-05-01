@@ -281,26 +281,30 @@ class PrivateTourRequestResource extends Resource
                 Tables\Columns\TextColumn::make('contact_name')
                     ->label('Contact')
                     ->formatStateUsing(fn ($record) => $record->contact_first_name . ' ' . $record->contact_last_name)
-                    ->description(fn ($record) => new \Illuminate\Support\HtmlString(
-                        '<span>' . e($record->contact_email) . '</span>' .
-                        ($record->contact_phone ? '<br><span style="color:#9ca3af;">' . e($record->contact_phone) . '</span>' : '')
+                    ->description(fn ($record) => trim(
+                        $record->contact_email . ($record->contact_phone ? ' · ' . $record->contact_phone : '')
                     ))
                     ->searchable(query: fn ($query, $search) => $query->where('contact_first_name', 'like', "%{$search}%")->orWhere('contact_last_name', 'like', "%{$search}%")),
-                Tables\Columns\TextColumn::make('guest_summary')
+                Tables\Columns\TextColumn::make('contact_email')
+                    ->label('Email')
+                    ->copyable()
+                    ->toggleable(isToggledHiddenByDefault: true)
+                    ->searchable(),
+                Tables\Columns\TextColumn::make('contact_phone')
+                    ->label('Phone')
+                    ->toggleable(isToggledHiddenByDefault: true)
+                    ->searchable(),
+                Tables\Columns\TextColumn::make('total_guests')
                     ->label('Guests')
+                    ->state(fn ($record) => ($record->adult_count + $record->child_count + $record->infant_count) . ' guests')
                     ->badge()
-                    ->color(fn ($record) => (
-                        $record->guests->filter(fn ($g) => !empty($g->first_name) && !empty($g->last_name))->count()
-                        >= ($record->adult_count + $record->child_count + $record->infant_count)
-                    ) ? 'success' : (
-                        $record->guests->filter(fn ($g) => !empty($g->first_name) && !empty($g->last_name))->count() === 0
-                        ? 'danger' : 'warning'
-                    ))
-                    ->formatStateUsing(fn ($record) => (
-                        $record->guests->filter(fn ($g) => !empty($g->first_name) && !empty($g->last_name))->count()
-                        . ' / '
-                        . ($record->adult_count + $record->child_count + $record->infant_count)
-                    )),
+                    ->color(fn ($record) => {
+                        $total = $record->adult_count + $record->child_count + $record->infant_count;
+                        $completed = $record->guests->filter(fn ($g) => !empty($g->first_name) && !empty($g->last_name))->count();
+                        if ($completed >= $total) return 'success';
+                        if ($completed === 0) return 'danger';
+                        return 'warning';
+                    }),
                 Tables\Columns\TextColumn::make('status')
                     ->badge()
                     ->color(fn ($state) => match ($state) {
