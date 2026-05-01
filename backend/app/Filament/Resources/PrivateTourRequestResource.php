@@ -348,7 +348,18 @@ class PrivateTourRequestResource extends Resource
                 Tables\Actions\EditAction::make()
                     ->visible(fn ($record) => in_array($record->status, [PrivateTourRequest::STATUS_REQUESTED])),
                 Tables\Actions\Action::make('confirm')
-                    ->label('Send Quote')
+                    ->label(function ($record) {
+                        $total = $record->adult_count + $record->child_count + $record->infant_count;
+                        $completed = $record->guests->filter(fn ($g) => !empty($g->first_name) && !empty($g->last_name))->count();
+                        $tourReady = !empty($record->confirmed_tour_date) && !empty($record->confirmed_start_time) && !empty($record->confirmed_end_time) && !empty($record->total_price_cents);
+                        if ($completed >= $total && $tourReady) return 'Send Quote';
+                        $missing = [];
+                        if ($completed < $total) $missing[] = "{$completed}/{$total} guests";
+                        if (empty($record->confirmed_tour_date)) $missing[] = 'no date';
+                        if (empty($record->confirmed_start_time) || empty($record->confirmed_end_time)) $missing[] = 'no time';
+                        if (empty($record->total_price_cents)) $missing[] = 'no price';
+                        return 'Incomplete: ' . implode(', ', $missing);
+                    })
                     ->icon('heroicon-o-check-circle')
                     ->color('success')
                     ->visible(fn ($record) => $record->status === PrivateTourRequest::STATUS_REQUESTED)
@@ -357,20 +368,6 @@ class PrivateTourRequestResource extends Resource
                         $completed = $record->guests->filter(fn ($g) => !empty($g->first_name) && !empty($g->last_name))->count();
                         $tourReady = !empty($record->confirmed_tour_date) && !empty($record->confirmed_start_time) && !empty($record->confirmed_end_time) && !empty($record->total_price_cents);
                         return $completed < $total || !$tourReady;
-                    })
-                    ->extraAttributes(function ($record) {
-                        $total = $record->adult_count + $record->child_count + $record->infant_count;
-                        $completed = $record->guests->filter(fn ($g) => !empty($g->first_name) && !empty($g->last_name))->count();
-                        $tourReady = !empty($record->confirmed_tour_date) && !empty($record->confirmed_start_time) && !empty($record->confirmed_end_time) && !empty($record->total_price_cents);
-                        $missing = [];
-                        if ($completed < $total) $missing[] = "guests ({$completed}/{$total})";
-                        if (empty($record->confirmed_tour_date)) $missing[] = 'tour date';
-                        if (empty($record->confirmed_start_time) || empty($record->confirmed_end_time)) $missing[] = 'start/end time';
-                        if (empty($record->total_price_cents)) $missing[] = 'price';
-                        if (count($missing) > 0) {
-                            return ['title' => 'Fill in: ' . implode(', ', $missing)];
-                        }
-                        return [];
                     })
                     ->form([
                         Forms\Components\DatePicker::make('confirmed_tour_date')
