@@ -32,8 +32,8 @@ import { createPrivateTourRequest, fetchPrivateTourAddons } from "@/lib/private-
 import type { AvailableAddon } from "@/types/booking";
 import { toast } from "sonner";
 
-const stepIcons = [Users, Calendar, PartyPopper, User];
-const stepLabels = ["Party Size", "Preferred Dates", "Occasion", "Your Details"];
+const stepIcons = [Users, Calendar, PartyPopper, Sparkles, User];
+const stepLabels = ["Party Size", "Preferred Dates", "Occasion", "Add-ons", "Your Details"];
 
 function PrivateTourPage() {
   const store = usePrivateTourStore();
@@ -223,7 +223,7 @@ function PrivateTourPage() {
           <div className="max-w-xl mx-auto h-1 bg-ocean-100 rounded-full overflow-hidden">
             <div
               className="h-full bg-ocean-700 rounded-full transition-all duration-300"
-              style={{ width: `${((store.currentStep - 1) / 3) * 100}%` }}
+              style={{ width: `${((store.currentStep - 1) / 4) * 100}%` }}
             />
           </div>
         </div>
@@ -470,8 +470,59 @@ function PrivateTourPage() {
             </Card>
           )}
 
-          {/* Step 3: Add-ons & Occasion */}
+          {/* Step 3: Occasion */}
           {store.currentStep === 3 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-xl sm:text-2xl">Special Occasion?</CardTitle>
+                <p className="text-ocean-500 text-sm">
+                  Let us know if you&apos;re celebrating something special.
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="flex items-center justify-between p-4 bg-ocean-50 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <PartyPopper className="h-5 w-5 text-ocean-500" />
+                    <div>
+                      <Label className="text-base font-medium">This is a special occasion</Label>
+                      <p className="text-ocean-400 text-sm">Birthday, anniversary, proposal, etc.</p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={store.hasOccasion}
+                    onCheckedChange={(checked) => store.setHasOccasion(checked)}
+                  />
+                </div>
+
+                {store.hasOccasion && (
+                  <div className="space-y-2">
+                    <Label htmlFor="occasion-details">Tell us about it</Label>
+                    <Textarea
+                      id="occasion-details"
+                      placeholder="e.g., We're celebrating my daughter's 10th birthday!..."
+                      value={store.occasionDetails}
+                      onChange={(e) => store.setOccasionDetails(e.target.value)}
+                      rows={3}
+                    />
+                  </div>
+                )}
+
+                <div className="flex justify-between">
+                  <Button variant="outline" onClick={() => store.prevStep()}>
+                    <ChevronLeft className="mr-2 h-4 w-4" />
+                    Back
+                  </Button>
+                  <Button variant="cta" onClick={() => store.nextStep()}>
+                    Add-ons
+                    <ChevronRight className="ml-2 h-4 w-4" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Step 4: Add-ons */}
+          {store.currentStep === 4 && (
             <Card>
               <CardHeader>
                 <CardTitle className="text-xl sm:text-2xl">Add-ons & Extras</CardTitle>
@@ -480,7 +531,6 @@ function PrivateTourPage() {
                 </p>
               </CardHeader>
               <CardContent className="space-y-6">
-                {/* Add-ons selection */}
                 {availableAddons.length > 0 && (
                   <div className="space-y-3">
                     <p className="text-sm font-medium text-ocean-700">Available Add-ons</p>
@@ -524,32 +574,10 @@ function PrivateTourPage() {
                   </div>
                 )}
 
-                {/* Occasion section */}
-                <div className="flex items-center justify-between p-4 bg-ocean-50 rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <PartyPopper className="h-5 w-5 text-ocean-500" />
-                    <div>
-                      <Label className="text-base font-medium">This is a special occasion</Label>
-                      <p className="text-ocean-400 text-sm">Birthday, anniversary, proposal, etc.</p>
-                    </div>
-                  </div>
-                  <Switch
-                    checked={store.hasOccasion}
-                    onCheckedChange={(checked) => store.setHasOccasion(checked)}
-                  />
-                </div>
-
-                {store.hasOccasion && (
-                  <div className="space-y-2">
-                    <Label htmlFor="occasion-details">Tell us about it</Label>
-                    <Textarea
-                      id="occasion-details"
-                      placeholder="e.g., We're celebrating my daughter's 10th birthday!..."
-                      value={store.occasionDetails}
-                      onChange={(e) => store.setOccasionDetails(e.target.value)}
-                      rows={3}
-                    />
-                  </div>
+                {availableAddons.length === 0 && (
+                  <p className="text-sm text-ocean-400 text-center py-4">
+                    No add-ons available at this time.
+                  </p>
                 )}
 
                 <div className="flex justify-between">
@@ -566,8 +594,8 @@ function PrivateTourPage() {
             </Card>
           )}
 
-          {/* Step 4: Contact Details + Submit */}
-          {store.currentStep === 4 && (
+          {/* Step 5: Contact Details + Submit */}
+          {store.currentStep === 5 && (
             <Card>
               <CardHeader>
                 <CardTitle className="text-xl sm:text-2xl">Your Details</CardTitle>

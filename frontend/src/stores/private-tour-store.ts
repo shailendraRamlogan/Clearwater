@@ -124,7 +124,7 @@ export const usePrivateTourStore = create<PrivateTourState>((set, get) => ({
   setContactPhone: (val) => set({ contactPhone: val }),
 
   setCurrentStep: (step) => set({ currentStep: step }),
-  nextStep: () => set((state) => ({ currentStep: Math.min(4, state.currentStep + 1) })),
+  nextStep: () => set((state) => ({ currentStep: Math.min(5, state.currentStep + 1) })),
   prevStep: () => set((state) => ({ currentStep: Math.max(1, state.currentStep - 1) })),
 
   setIsSubmitting: (val) => set({ isSubmitting: val }),
