@@ -29,17 +29,17 @@ class AddonController extends Controller
 
     public function privateTourAddons()
     {
-        return response()->json(
-            Addon::active()
-                ->forPrivateTours()
-                ->orderBy("sort_order")
-                ->get()
-                ->map(fn ($a) => [
-                    "id" => $a->id,
-                    "title" => $a->title,
-                    "description" => $a->description,
-                    "icon_name" => $a->icon_name,
-                ])
-        );
+        $addons = Addon::active()
+            ->forPrivateTours()
+            ->orderBy("sort_order")
+            ->get()
+            ->map(fn ($a) => [
+                "id" => $a->id,
+                "title" => $a->title,
+                "description" => $a->description,
+                "icon_name" => $a->icon_name,
+            ]);
+
+        return response()->json(['addons' => $addons]);
     }
 }
