@@ -42,7 +42,7 @@ function PaymentFormInner() {
     }
     getPrivateTourByRef(ref)
       .then(({ request: req }) => {
-        if (req.status !== "confirmed") {
+        if (!['awaiting_payment', 'confirmed'].includes(req.status)) {
           toast.error("This request is not ready for payment.");
           return;
         }
