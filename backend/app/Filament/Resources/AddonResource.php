@@ -28,16 +28,24 @@ class AddonResource extends Resource
             ->schema([
                 Forms\Components\TextInput::make("title")->required()->maxLength(255),
                 Forms\Components\TextInput::make("price_cents")
-                    ->label("Regular Price (cents)")
+                    ->label("Regular Price")
                     ->numeric()
                     ->required()
-                    ->formatStateUsing(fn ($state) => $state ?? 0),
+                    ->prefix('$')
+                    ->minValue(0)
+                    ->step(0.01)
+                    ->dehydrateStateUsing(fn ($state) => (int) round(($state ?? 0) * 100))
+                    ->formatStateUsing(fn ($state) => $state ? round($state / 100, 2) : null),
                 Forms\Components\TextInput::make("private_price_cents")
-                    ->label("Private Tour Price (cents)")
+                    ->label("Private Tour Price")
                     ->numeric()
                     ->nullable()
-                    ->helperText("Price shown to customers on private tour payment page. Admin still sets the grand total.")
-                    ->formatStateUsing(fn ($state) => $state ?? null),
+                    ->prefix('$')
+                    ->minValue(0)
+                    ->step(0.01)
+                    ->dehydrateStateUsing(fn ($state) => $state !== null ? (int) round((float) $state * 100) : null)
+                    ->formatStateUsing(fn ($state) => $state ? round($state / 100, 2) : null)
+                    ->helperText("Price shown to customers on private tour payment page. Admin still sets the grand total."),
                 Forms\Components\Select::make("available_for")
                     ->label("Available For")
                     ->options([
