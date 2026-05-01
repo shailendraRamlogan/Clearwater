@@ -53,9 +53,11 @@ function PrivateTourPage() {
   useEffect(() => {
     fetchPrivateTourAddons()
       .then(({ addons }) => {
-        setAvailableAddons(addons);
+        setAvailableAddons(Array.isArray(addons) ? addons : []);
       })
-      .catch(() => {});
+      .catch(() => {
+        setAvailableAddons([]);
+      });
   }, []);
 
   const handleSubmit = async () => {
