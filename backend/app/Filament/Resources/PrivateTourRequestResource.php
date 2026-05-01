@@ -253,6 +253,7 @@ class PrivateTourRequestResource extends Resource
                                 ->default(false),
                         ])
                         ->addActionLabel('Add Guest')
+                        ->maxItems(fn ($record) => $record ? $record->adult_count + $record->child_count : 100)
                         ->disabled(fn ($record) => !in_array($record?->status, [PrivateTourRequest::STATUS_REQUESTED]))
                         ->reorderable(false)
                         ->columnSpanFull(),
