@@ -629,14 +629,26 @@ HTML;
             $ctaHtml = "<tr><td style=\"padding:24px 32px; text-align:center;\"><a href=\"{$paymentUrl}\" style=\"display:inline-block; background-color:#0d9488; color:#ffffff; padding:14px 40px; border-radius:8px; text-decoration:none; font-weight:600; font-size:16px;\">Pay Now — {$grandTotal}</a><p style=\"margin:12px 0 0; font-size:13px; color:#9ca3af;\">Click to complete your payment and secure your private tour.</p></td></tr>";
         }
 
-        // Build addon rows for pricing table
+        // Build addon rows
         $addonRowsHtml = '';
         $request->loadMissing('addons.addon');
-        foreach ($request->addons as $pta) {
-            if ($pta->unit_price_cents === null) continue;
-            $addonTitle = e($pta->addon->title ?? 'Add-on');
-            $addonPrice = '$' . number_format($pta->unit_price_cents / 100, 2);
-            $addonRowsHtml .= "<tr><td style=\"padding:10px 14px; border-bottom:1px solid #f3f4f6; font-size:14px; color:#6b7280;\">&nbsp;&nbsp;{$addonTitle}</td><td style=\"padding:10px 14px; border-bottom:1px solid #f3f4f6; text-align:right; font-size:14px; color:#6b7280;\">{$addonPrice}</td></tr>";
+        if ($request->addons->isNotEmpty()) {
+            foreach ($request->addons as $pta) {
+                $addonTitle = e($pta->addon->title ?? 'Add-on');
+                $addonRowsHtml .= "<tr><td style=\"padding:10px 14px; border-bottom:1px solid #f3f4f6; font-size:14px; color:#6b7280;\">&nbsp;&nbsp;✨ {$addonTitle}</td><td style=\"padding:10px 14px; border-bottom:1px solid #f3f4f6; text-align:right; font-size:14px; color:#6b7280;\">Included</td></tr>";
+            }
+        }
+
+        // Build guest list
+        $guestRowsHtml = '';
+        $request->loadMissing('guests');
+        if ($request->guests->isNotEmpty()) {
+            $guestRowsHtml = '<tr style="background:#f9fafb;"><th style="padding:10px 14px; text-align:left; font-size:12px; font-weight:600; color:#6b7280; text-transform:uppercase; letter-spacing:0.5px;" colspan="2">Guests</th></tr>';
+            foreach ($request->guests as $g) {
+                $name = e($g->first_name . ' ' . $g->last_name);
+                $badge = $g->is_primary ? ' <span style="font-size:11px; background:#dbeafe; color:#1e40af; padding:2px 8px; border-radius:9999px; margin-left:6px;">Primary</span>' : '';
+                $guestRowsHtml .= "<tr><td style=\"padding:10px 14px; border-bottom:1px solid #f3f4f6; font-size:14px; color:#374151;\">{$name}{$badge}</td><td style=\"padding:10px 14px; border-bottom:1px solid #f3f4f6; text-align:right; font-size:14px; color:#6b7280;\">" . ($g->email ? e($g->email) : '—') . "</td></tr>";
+            }
         }
 
         $html = <<<HTML
@@ -689,6 +701,13 @@ HTML;
                                 {$addonRowsHtml}
                                 <tr><td style="padding:10px 14px; border-bottom:1px solid #f3f4f6; font-size:14px;">Fees</td><td style="padding:10px 14px; border-bottom:1px solid #f3f4f6; text-align:right; font-size:14px;">{$fees}</td></tr>
                                 <tr><td style="padding:10px 14px; font-size:16px; font-weight:700; color:#0d9488;">Total</td><td style="padding:10px 14px; text-align:right; font-size:16px; font-weight:700; color:#0d9488;">{$grandTotal}</td></tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:24px 32px 0;">
+                            <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb; border-radius:8px; overflow:hidden;">
+                                {$guestRowsHtml}
                             </table>
                         </td>
                     </tr>

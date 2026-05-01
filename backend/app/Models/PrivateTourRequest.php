@@ -108,7 +108,7 @@ class PrivateTourRequest extends Model
 
     public function getPaymentUrlAttribute(): ?string
     {
-        if ($this->status !== self::STATUS_CONFIRMED) {
+        if (!in_array($this->status, [self::STATUS_AWAITING_PAYMENT, self::STATUS_CONFIRMED])) {
             return null;
         }
         return "https://bookings.clearboatbahamas.com/book/private-tour/pay?ref={$this->booking_ref}";
