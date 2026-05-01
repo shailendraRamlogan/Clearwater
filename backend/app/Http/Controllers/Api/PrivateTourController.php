@@ -200,13 +200,17 @@ class PrivateTourController extends Controller
 
     public function initiatePayment(Request $request, string $id)
     {
-        // Lookup by booking_ref or UUID
-        $privateTourRequest = PrivateTourRequest::where('booking_ref', $id)
-            ->orWhere('id', $id)
-            ->firstOrFail();
+        // Lookup by booking_ref first, then by UUID
+        $privateTourRequest = PrivateTourRequest::where('booking_ref', $id)->first();
+        if (!$privateTourRequest) {
+            $privateTourRequest = PrivateTourRequest::where('id', $id)->firstOrFail();
+        }
+        if (!$privateTourRequest) {
+            abort(404, 'Private tour request not found.');
+        }
 
-        if ($privateTourRequest->status !== PrivateTourRequest::STATUS_CONFIRMED) {
-            return response()->json(['message' => 'Payment can only be initiated for confirmed requests.'], 422);
+        if (!in_array($privateTourRequest->status, [PrivateTourRequest::STATUS_AWAITING_PAYMENT, PrivateTourRequest::STATUS_CONFIRMED])) {
+            return response()->json(['message' => 'Payment can only be initiated for requests that have been quoted.'], 422);
         }
 
         $stripeKey = config('services.stripe.secret');

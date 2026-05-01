@@ -514,7 +514,7 @@ class PrivateTourRequestResource extends Resource
                         $addonPrices = $data['addon_prices'] ?? [];
 
                         $record->update([
-                            'status' => PrivateTourRequest::STATUS_CONFIRMED,
+                            'status' => PrivateTourRequest::STATUS_AWAITING_PAYMENT,
                             'confirmed_tour_date' => $data['confirmed_tour_date'],
                             'confirmed_start_time' => ($data['confirmed_start_time'] ?? null) ? $data['confirmed_start_time'] . ':00' : null,
                             'confirmed_end_time' => ($data['confirmed_end_time'] ?? null) ? $data['confirmed_end_time'] . ':00' : null,
