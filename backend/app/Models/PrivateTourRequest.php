@@ -69,7 +69,7 @@ class PrivateTourRequest extends Model
 
     public function booking()
     {
-        return $this->hasOne(Booking::class, 'booking_ref', 'booking_ref');
+        return $this->belongsTo(Booking::class, 'booking_id', 'id');
     }
 
     public function totalGuests(): int

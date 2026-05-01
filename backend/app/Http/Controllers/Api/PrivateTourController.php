@@ -345,6 +345,7 @@ class PrivateTourController extends Controller
             // Update private tour request status
             $privateTourRequest->update([
                 'status' => PrivateTourRequest::STATUS_COMPLETED,
+                'booking_id' => $booking->id,
             ]);
 
             return $booking;
@@ -352,7 +353,7 @@ class PrivateTourController extends Controller
 
         // Send confirmation email
         try {
-            app(EmailService::class)->sendPrivateTourPaymentSucceeded($privateTourRequest->fresh());
+            app(EmailService::class)->sendPrivateTourPaymentSucceeded($privateTourRequest->fresh()->load('booking'));
         } catch (\Exception $e) {
             \Log::warning("Private tour payment success email error: " . $e->getMessage());
         }
