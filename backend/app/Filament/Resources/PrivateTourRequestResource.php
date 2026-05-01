@@ -352,6 +352,26 @@ class PrivateTourRequestResource extends Resource
                     ->icon('heroicon-o-check-circle')
                     ->color('success')
                     ->visible(fn ($record) => $record->status === PrivateTourRequest::STATUS_REQUESTED)
+                    ->disabled(function ($record) {
+                        $total = $record->adult_count + $record->child_count + $record->infant_count;
+                        $completed = $record->guests->filter(fn ($g) => !empty($g->first_name) && !empty($g->last_name))->count();
+                        $tourReady = !empty($record->confirmed_tour_date) && !empty($record->confirmed_start_time) && !empty($record->confirmed_end_time) && !empty($record->total_price_cents);
+                        return $completed < $total || !$tourReady;
+                    })
+                    ->tooltip(function ($record) {
+                        $total = $record->adult_count + $record->child_count + $record->infant_count;
+                        $completed = $record->guests->filter(fn ($g) => !empty($g->first_name) && !empty($g->last_name))->count();
+                        $tourReady = !empty($record->confirmed_tour_date) && !empty($record->confirmed_start_time) && !empty($record->confirmed_end_time) && !empty($record->total_price_cents);
+                        $missing = [];
+                        if ($completed < $total) $missing[] = "guests ({$completed}/{$total})";
+                        if (empty($record->confirmed_tour_date)) $missing[] = 'tour date';
+                        if (empty($record->confirmed_start_time) || empty($record->confirmed_end_time)) $missing[] = 'start/end time';
+                        if (empty($record->total_price_cents)) $missing[] = 'price';
+                        if (count($missing) > 0) {
+                            return 'Fill in: ' . implode(', ', $missing);
+                        }
+                        return null;
+                    })
                     ->form([
                         Forms\Components\DatePicker::make('confirmed_tour_date')
                             ->label('Confirmed Tour Date')
