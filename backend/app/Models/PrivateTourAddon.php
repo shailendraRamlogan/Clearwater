@@ -8,6 +8,8 @@ use Illuminate\Support\Str;
 
 class PrivateTourAddon extends Model
 {
+    protected $table = 'private_tour_request_addons';
+
     protected $keyType = 'string';
     public $incrementing = false;
 
