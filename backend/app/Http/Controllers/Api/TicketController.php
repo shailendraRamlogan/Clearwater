@@ -26,10 +26,6 @@ class TicketController extends Controller
             return response()->json(['error' => 'Booking not found'], 404);
         }
 
-        if (!$this->ticketService->getAllGuestsComplete($booking)) {
-            return response()->json(['error' => 'All guest information must be completed before downloading tickets'], 422);
-        }
-
         $pdfContent = $this->ticketService->generateTicketPdf($booking);
 
         return response($pdfContent)
@@ -74,7 +70,6 @@ class TicketController extends Controller
 
         return response()->json([
             'booking_ref' => $booking->booking_ref,
-            'all_guests_complete' => $this->ticketService->getAllGuestsComplete($booking),
             'tickets' => $tickets,
         ]);
     }

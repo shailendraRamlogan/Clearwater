@@ -23,7 +23,7 @@ class EmailService
             return;
         }
 
-        $allComplete = $this->ticketService->getAllGuestsComplete($booking);
+        $allComplete = true  /* always downloadable */;
 
         try {
             $result = Resend::emails()->send([

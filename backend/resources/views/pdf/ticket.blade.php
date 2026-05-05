@@ -169,8 +169,8 @@
     <div class="ticket-block">
         <div class="ticket-top">
             <div class="ticket-top-left">
-                <div class="guest-name">{{ $ticket['guest']->first_name }} {{ $ticket['guest']->last_name }}</div>
-                <span class="guest-role">{{ $ticket['guest']->is_primary ? 'Primary Booker' : 'Guest' }}</span>
+                <div class="guest-name">{{ $ticket['guest_name'] }}</div>
+                <span class="guest-role">{{ $ticket['is_primary'] ? 'Primary Booker' : $ticket['ticket_type'] . ' Ticket' }}</span>
             </div>
             <div class="ticket-top-right">
                 <div class="ticket-counter">Ticket {{ $globalIdx }} of {{ $totalTickets }}</div>

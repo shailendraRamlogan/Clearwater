@@ -6,22 +6,26 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatCurrency(amount: number): string {
-  return `BSD $${amount.toFixed(2)}`;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "BSD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
+export function formatTime(time: string): string {
+  const [h, m] = time.split(":").map(Number);
+  const period = h >= 12 ? "PM" : "AM";
+  const hour = h % 12 || 12;
+  return `${hour}:${m.toString().padStart(2, "0")} ${period}`;
 }
 
 export function formatDate(date: Date): string {
   return new Intl.DateTimeFormat("en-US", {
     weekday: "long",
-    year: "numeric",
     month: "long",
     day: "numeric",
+    year: "numeric",
   }).format(date);
-}
-
-export function formatTime(time: string): string {
-  const [hours, minutes] = time.split(":");
-  const h = parseInt(hours);
-  const ampm = h >= 12 ? "PM" : "AM";
-  const displayHour = h % 12 || 12;
-  return `${displayHour}:${minutes} ${ampm}`;
 }
