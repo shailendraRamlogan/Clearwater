@@ -132,6 +132,10 @@ export interface PrivateTourRequest {
   preferredDates: PrivateTourPreferredDate[];
   guests: PrivateTourGuest[];
   addons?: PrivateTourAddon[];
+  confirmed_start_time?: string;
+  confirmed_end_time?: string;
+  formatted_time?: string;
+  grand_total?: number;
   created_at: string;
   updated_at: string;
 }

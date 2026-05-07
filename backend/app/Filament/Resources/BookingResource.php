@@ -66,14 +66,9 @@ class BookingResource extends Resource
 
                 Forms\Components\Section::make('Order Summary')
                     ->schema([
-                        Forms\Components\TextInput::make('guests_expected')
-                            ->label('Total Guests')
+                        Forms\Components\TextInput::make('party_size')
+                            ->label('Party Size (Tickets)')
                             ->formatStateUsing(fn ($record) => $record ? $record->items->sum('quantity') : 0)
-                            ->disabled()
-                            ->dehydrated(false),
-                        Forms\Components\TextInput::make('guests_collected')
-                            ->label('Guests Collected')
-                            ->formatStateUsing(fn ($record) => $record ? $record->guests()->count() : 0)
                             ->disabled()
                             ->dehydrated(false),
                         Forms\Components\TextInput::make('total_price_display')
@@ -153,15 +148,9 @@ class BookingResource extends Resource
                         'completed' => 'info',
                         default => 'gray',
                     }),
-                Tables\Columns\TextColumn::make('complete_guests_count')
-                    ->label('Guests')
-                    ->badge()
-                    ->color(function ($record) {
-                        $total = $record->guests_count;
-                        $complete = $record->complete_guests_count;
-                        return $complete >= $total ? 'success' : ($complete === 1 ? 'warning' : 'danger');
-                    })
-                    ->formatStateUsing(fn ($record) => $record->complete_guests_count . ' / ' . $record->guests_count),
+                Tables\Columns\TextColumn::make('party_size')
+                    ->label('Tickets')
+                    ->state(fn ($record) => $record->items->sum('quantity')),
                 Tables\Columns\TextColumn::make('grand_total')
                     ->label('Total')
                     ->formatStateUsing(fn ($record) => '$' . number_format((($record->total_price_cents ?? 0) + ($record->fees_cents ?? 0)) / 100, 2)),

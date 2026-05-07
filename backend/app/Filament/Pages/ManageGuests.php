@@ -44,7 +44,6 @@ class ManageGuests extends Page
     public function getBreadcrumbs(): array
     {
         return [
-            IncompleteBookings::getUrl() => 'Incomplete Bookings',
             'Manage Guests',
         ];
     }

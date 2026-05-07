@@ -296,7 +296,7 @@ class PrivateTourController extends Controller
                 'source_type' => 'private',
                 'photo_upgrade_count' => 0,
                 'special_occasion' => $privateTourRequest->has_occasion ? 'other' : null,
-                'special_comment' => 'Private Tour — ' . $privateTourRequest->formatted_time,
+                'special_comment' => 'Private Tour ({$privateTourRequest->booking_ref}) — ' . $privateTourRequest->formatted_time,
                 'total_price_cents' => $privateTourRequest->total_price_cents,
                 'fees_cents' => $privateTourRequest->fees_cents,
             ]);
@@ -318,7 +318,7 @@ class PrivateTourController extends Controller
             BookingItem::create([
                 'booking_id' => $booking->id,
                 'ticket_type' => 'private_tour',
-                'quantity' => 1,
+                'quantity' => $privateTourRequest->adult_count + $privateTourRequest->child_count,
                 'unit_price_cents' => $privateTourRequest->total_price_cents,
             ]);
 
@@ -327,7 +327,7 @@ class PrivateTourController extends Controller
                 BookingAddon::create([
                     'booking_id' => $booking->id,
                     'addon_id' => $privateTourAddon->addon_id,
-                    'quantity' => 1,
+                    'quantity' => $privateTourRequest->adult_count + $privateTourRequest->child_count,
                     'unit_price_cents' => $privateTourAddon->unit_price_cents ?? 0,
                 ]);
             }

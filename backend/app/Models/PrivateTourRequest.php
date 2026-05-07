@@ -22,7 +22,7 @@ class PrivateTourRequest extends Model
         'adult_count', 'child_count', 'infant_count',
         'has_occasion', 'occasion_details', 'admin_notes',
         'confirmed_tour_date', 'confirmed_start_time', 'confirmed_end_time',
-        'total_price_cents', 'fees_cents', 'stripe_intent_id',
+        'total_price_cents', 'fees_cents', 'stripe_intent_id', 'booking_id',
     ];
 
     protected $appends = ['grand_total'];

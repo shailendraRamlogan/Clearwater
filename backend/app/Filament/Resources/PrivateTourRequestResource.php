@@ -207,58 +207,6 @@ class PrivateTourRequestResource extends Resource
                     ])
                     ->visible(fn ($record) => $record && in_array($record?->status, [PrivateTourRequest::STATUS_REQUESTED])),
 
-                // Guest Information
-                Forms\Components\Section::make('Guest Information')
-                ->schema([
-                    Forms\Components\Placeholder::make('guest_counter')
-                        ->label('')
-                        ->content(function ($get, $livewire, $record) {
-                            if (!$record) return null;
-                            $total = $record->adult_count + $record->child_count + $record->infant_count;
-                            $guests = $get('guests') ?? [];
-                            $completed = collect($guests)->filter(fn ($g) => !empty($g['first_name']) && !empty($g['last_name']))->count();
-                            $color = $completed >= $total ? '#065f46'
-                                : ($completed === 0 ? '#991b1b' : '#92400e');
-                            $bg = $completed >= $total ? '#d1fae5'
-                                : ($completed === 0 ? '#fee2e2' : '#fef3c7');
-                            return new \Illuminate\Support\HtmlString(
-                                "<span style=\"display:inline-block; padding:4px 12px; border-radius:9999px; font-size:13px; font-weight:600; background:{$bg}; color:{$color};\">{$completed} / {$total} guests completed</span>"
-                            );
-                        })
-                        ->reactive(),
-                    Forms\Components\Repeater::make('guests')
-                        ->label('')
-                        ->relationship('guests')
-                        ->schema([
-                            Forms\Components\Grid::make(2)
-                                ->schema([
-                                    Forms\Components\TextInput::make('first_name')
-                                        ->required()
-                                        ->maxLength(100),
-                                    Forms\Components\TextInput::make('last_name')
-                                        ->required()
-                                        ->maxLength(100),
-                                ]),
-                            Forms\Components\Grid::make(2)
-                                ->schema([
-                                    Forms\Components\TextInput::make('email')
-                                        ->email()
-                                        ->maxLength(255),
-                                    Forms\Components\TextInput::make('phone')
-                                        ->maxLength(30)
-                                        ->label('Phone'),
-                                ]),
-                            Forms\Components\Checkbox::make('is_primary')
-                                ->label('Primary Contact')
-                                ->default(false),
-                        ])
-                        ->addActionLabel('Add Guest')
-                        ->maxItems(fn ($record) => $record ? $record->adult_count + $record->child_count : 100)
-                        ->disabled(fn ($record) => !in_array($record?->status, [PrivateTourRequest::STATUS_REQUESTED]))
-                        ->reorderable(false)
-                        ->columnSpanFull(),
-                ]),
-
                 // Status display
                 Forms\Components\Section::make('Status')
                     ->schema([
@@ -325,16 +273,8 @@ class PrivateTourRequestResource extends Resource
                     ->toggleable(isToggledHiddenByDefault: true)
                     ->searchable(),
                 Tables\Columns\TextColumn::make('total_guests')
-                    ->label('Guests')
-                    ->state(fn ($record) => ($record->guests->filter(fn ($g) => !empty($g->first_name) && !empty($g->last_name))->count()) . ' / ' . ($record->adult_count + $record->child_count + $record->infant_count))
-                    ->badge()
-                    ->color(function ($record) {
-                        $total = $record->adult_count + $record->child_count + $record->infant_count;
-                        $completed = $record->guests->filter(fn ($g) => !empty($g->first_name) && !empty($g->last_name))->count();
-                        if ($completed >= $total) return 'success';
-                        if ($completed === 0) return 'danger';
-                        return 'warning';
-                    }),
+                    ->label('Party Size')
+                    ->state(fn ($record) => $record->adult_count + $record->child_count + $record->infant_count),
                 Tables\Columns\TextColumn::make('status')
                     ->badge()
                     ->color(fn ($state) => match ($state) {
@@ -383,10 +323,8 @@ class PrivateTourRequestResource extends Resource
                     ->color('success')
                     ->visible(fn ($record) => $record->status === PrivateTourRequest::STATUS_REQUESTED)
                     ->disabled(function ($record) {
-                        $total = $record->adult_count + $record->child_count + $record->infant_count;
-                        $completed = $record->guests->filter(fn ($g) => !empty($g->first_name) && !empty($g->last_name))->count();
                         $tourReady = !empty($record->confirmed_tour_date) && !empty($record->confirmed_start_time) && !empty($record->confirmed_end_time) && !empty($record->total_price_cents);
-                        return $completed < $total || !$tourReady;
+                        return !$tourReady;
                     })
                     ->form([
                         Forms\Components\Placeholder::make('summary')
@@ -417,12 +355,14 @@ class PrivateTourRequestResource extends Resource
                                     ? '$' . number_format($record->fees_cents / 100, 2)
                                     : '$0.00';
                                 $grandTotal = '$' . number_format(($record->total_price_cents + $record->fees_cents) / 100, 2);
-
+                                $partySize = max(1, $record->guests->count());
                                 // Guest list
                                 $guestHtml = '';
                                 $primary = $record->guests->firstWhere('is_primary', true);
                                 if ($primary) {
                                     $guestHtml .= "<div style=\"padding:6px 0; border-bottom:1px solid #f3f4f6; font-size:14px;\"><strong>" . e($primary->first_name . ' ' . $primary->last_name) . '</strong> <span style=\"color:#6b7280; font-size:12px;\">(Primary)</span></div>';
+                                } else {
+                                    $guestHtml .= "<div style=\"padding:6px 0; border-bottom:1px solid #f3f4f6; font-size:14px;\"><strong>" . e($record->contact_first_name . ' ' . $record->contact_last_name) . '</strong> <span style=\"color:#6b7280; font-size:12px;\">(Primary Booker)</span></div>';
                                 }
                                 foreach ($record->guests->where('is_primary', false) as $g) {
                                     $guestHtml .= "<div style=\"padding:6px 0; border-bottom:1px solid #f3f4f6; font-size:14px; color:#374151;\">" . e($g->first_name . ' ' . $g->last_name) . '</div>';
@@ -450,8 +390,6 @@ class PrivateTourRequestResource extends Resource
         <tr><td style="padding:8px 14px; border-bottom:1px solid #f3f4f6;"><strong>Processing Fee</strong><span style="float:right; color:#6b7280;">{$fees}</span></td></tr>
         <tr style="background:#f0fdfa;"><td style="padding:10px 14px; font-weight:700; color:#0d9488;"><strong>Grand Total</strong><span style="float:right;">{$grandTotal}</span></td></tr>
     </table>
-    <div style="font-size:11px; font-weight:600; color:#6b7280; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">Guests ({$record->guests->count()})</div>
-    {$guestHtml}
     {$addonHtml}
 </div>
 HTML;
@@ -459,6 +397,18 @@ HTML;
                             }),
                     ])
                     ->action(function (PrivateTourRequest $record): void {
+                        // Ensure a primary guest record exists from contact info
+                        if ($record->guests->where('is_primary', true)->isEmpty()) {
+                            $record->guests()->create([
+                                'first_name' => $record->contact_first_name,
+                                'last_name' => $record->contact_last_name,
+                                'email' => $record->contact_email,
+                                'phone' => $record->contact_phone,
+                                'is_primary' => true,
+                            ]);
+                            $record->load('guests');
+                        }
+
                         // Recalculate fees
                         $feeService = app(FeeService::class);
                         $feeResult = $feeService->calculateFees($record->total_price_cents);

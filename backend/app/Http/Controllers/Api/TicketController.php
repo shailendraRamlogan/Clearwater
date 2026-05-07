@@ -22,6 +22,14 @@ class TicketController extends Controller
 
         $booking = \App\Models\Booking::where('booking_ref', $ref)->first();
 
+        // Fallback: check if ref is a PrivateTourRequest reference
+        if (!$booking) {
+            $ptr = \App\Models\PrivateTourRequest::where('booking_ref', $ref)->first();
+            if ($ptr && $ptr->booking_id) {
+                $booking = \App\Models\Booking::find($ptr->booking_id);
+            }
+        }
+
         if (!$booking) {
             return response()->json(['error' => 'Booking not found'], 404);
         }
@@ -31,46 +39,5 @@ class TicketController extends Controller
         return response($pdfContent)
             ->header('Content-Type', 'application/pdf')
             ->header('Content-Disposition', 'attachment; filename="tickets-' . $ref . '.pdf"');
-    }
-
-    public function preview(Request $request)
-    {
-        $ref = $request->query('ref');
-        $email = $request->query('email');
-
-        if (!$ref) {
-            return response()->json(['error' => 'Booking reference is required'], 400);
-        }
-
-        $booking = \App\Models\Booking::where('booking_ref', $ref)
-            ->with(['guests', 'timeSlot.boat'])
-            ->first();
-
-        if (!$booking) {
-            return response()->json(['error' => 'Booking not found'], 404);
-        }
-
-        $boatName = $booking->timeSlot?->boat?->name ?? 'N/A';
-
-        $tickets = $booking->guests->map(function ($guest) use ($booking, $boatName) {
-            $qrData = json_encode([
-                'booking_ref' => $booking->booking_ref,
-                'guest_uuid' => $guest->id,
-                'ticket_type' => $guest->is_primary ? 'Primary' : 'Guest',
-                'tour_date' => $booking->tour_date->toDateString(),
-                'boat_name' => $boatName,
-            ]);
-
-            return [
-                'guest_name' => $guest->full_name,
-                'ticket_type' => $guest->is_primary ? 'Primary' : 'Guest',
-                'qr_svg' => $this->ticketService->generateQrSvg($qrData),
-            ];
-        });
-
-        return response()->json([
-            'booking_ref' => $booking->booking_ref,
-            'tickets' => $tickets,
-        ]);
     }
 }

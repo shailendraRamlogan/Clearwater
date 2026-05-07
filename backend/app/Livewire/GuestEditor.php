@@ -141,7 +141,7 @@ class GuestEditor extends Component
     public function saveAndFinish(): void
     {
         $this->saveGuest();
-        $this->redirect(\App\Filament\Pages\IncompleteBookings::getUrl());
+        $this->redirect(\App\Filament\Resources\BookingResource::getUrl('index'));
     }
 
     public function render()

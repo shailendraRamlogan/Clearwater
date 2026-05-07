@@ -14,10 +14,11 @@ class EmailService
         private TicketService $ticketService,
     ) {}
 
-    public function sendConfirmation(Booking $booking): void
+    public function sendConfirmation(Booking $booking, ?string $displayRef = null): void
     {
         $booking->loadMissing(['primaryGuest', 'timeSlot.boat', 'items', 'addons.addon']);
         $guest = $booking->primaryGuest;
+        $ref = $displayRef ?? $booking->booking_ref;
 
         if (!$guest || !config('services.resend.key')) {
             return;
@@ -29,14 +30,14 @@ class EmailService
             $result = Resend::emails()->send([
                 'from' => 'Clear Boat Bahamas <bookings@mail.clearboatbahamas.com>',
                 'to' => [$guest->email],
-                'subject' => "Booking Confirmed — {$booking->booking_ref}",
-                'html' => $this->buildReceiptHtml($booking, $allComplete),
+                'subject' => "Booking Confirmed — {$ref}",
+                'html' => $this->buildReceiptHtml($booking, $allComplete, $ref),
             ]);
 
             EmailLog::create([
                 'booking_id' => $booking->id,
                 'recipient' => $guest->email,
-                'subject' => "Booking Confirmed — {$booking->booking_ref}",
+                'subject' => "Booking Confirmed — {$ref}",
                 'template' => $allComplete ? 'booking_receipt_with_tickets' : 'booking_receipt',
                 'resend_id' => $result->id ?? null,
                 'status' => 'sent',
@@ -47,7 +48,7 @@ class EmailService
             EmailLog::create([
                 'booking_id' => $booking->id,
                 'recipient' => $guest->email,
-                'subject' => "Booking Confirmed — {$booking->booking_ref}",
+                'subject' => "Booking Confirmed — {$ref}",
                 'template' => 'booking_receipt',
                 'status' => 'failed',
             ]);
@@ -93,11 +94,13 @@ class EmailService
         }
     }
 
-    private function buildReceiptHtml(Booking $booking, bool $guestsComplete = false): string
+    private function buildReceiptHtml(Booking $booking, bool $guestsComplete = false, ?string $displayRef = null): string
     {
         $booking->loadMissing(['primaryGuest', 'timeSlot.boat', 'items', 'addons.addon', 'guests']);
         $guest = $booking->primaryGuest;
         $isPrivate = $booking->source_type === 'private';
+        $ref = $displayRef ?? $booking->booking_ref;
+        $urlRef = $booking->booking_ref; // always use real booking_ref for URLs
 
         if (!$guest || !config('services.resend.key')) {
             return '';
@@ -118,7 +121,7 @@ class EmailService
         $fees = '$' . number_format(($booking->fees_cents ?? 0) / 100, 2);
         $grandTotal = '$' . number_format(($booking->total_price_cents + ($booking->fees_cents ?? 0)) / 100, 2);
 
-        $confirmationUrl = "https://bookings.clearboatbahamas.com/book/confirmation?ref={$booking->booking_ref}&email=" . urlencode($guest->email);
+        $confirmationUrl = "https://bookings.clearboatbahamas.com/book/confirmation?ref={$urlRef}&email=" . urlencode($guest->email);
 
         // Build items table
         $itemsHtml = '';
@@ -222,7 +225,7 @@ CTA;
                     <tr>
                         <td style="padding:24px 32px 0; text-align:center;">
                             <span style="display:inline-block; background:#f0fdfa; color:#0d9488; font-size:13px; font-weight:600; padding:6px 16px; border-radius:9999px; letter-spacing:0.5px;">
-                                REF: {$booking->booking_ref}
+                                REF: {$ref}
                             </span>
                         </td>
                     </tr>
@@ -833,8 +836,8 @@ HTML;
             return;
         }
 
-        // Reuse the standard confirmation email
-        $this->sendConfirmation($booking);
+        // Send confirmation email using the PTR reference
+        $this->sendConfirmation($booking, $request->booking_ref);
     }
 
     // ─── Private Tour Helpers ────────────────────────────────────────────────
