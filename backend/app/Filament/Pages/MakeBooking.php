@@ -15,14 +15,15 @@ use App\Services\FeeService;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Grid;
-use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\ViewField;
 use Filament\Forms\Components\Wizard;
+use Filament\Forms\Components\Wizard\Step;
 use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -60,192 +61,369 @@ class MakeBooking extends Page
     {
         return $form
             ->schema([
-                Section::make('Booking Type')
-                    ->schema([
-                        Radio::make('booking_type')
-                            ->label('')
-                            ->options([
-                                'regular' => 'Regular Sailing',
-                                'private' => 'Private Tour',
-                            ])
-                            ->default('regular')
-                            ->inline()
-                            ->reactive()
-                            ->required(),
-                    ]),
+                Wizard::make([
+                    // ── Step 0: Choose Booking Type ──
+                    Step::make('Booking Type')
+                        ->icon('heroicon-o-arrow-right-start-on-rectangle')
+                        ->schema([
+                            Radio::make('booking_type')
+                                ->label('')
+                                ->options([
+                                    'regular' => 'Regular Sailing — Standard scheduled tour with individual tickets',
+                                    'private' => 'Private Tour — Exclusive boat booking for your group',
+                                ])
+                                ->default('regular')
+                                ->required()
+                                ->columnSpanFull(),
+                        ]),
 
-                // Guest / Contact Information
-                Section::make(fn (callable $get) => $get('booking_type') === 'private' ? 'Contact Information' : 'Guest Information')
-                    ->schema([
-                        Grid::make(2)
-                            ->schema([
-                                TextInput::make('guest_first_name')
-                                    ->label('First Name')
-                                    ->required()
-                                    ->maxLength(255),
-                                TextInput::make('guest_last_name')
-                                    ->label('Last Name')
-                                    ->required()
-                                    ->maxLength(255),
-                                TextInput::make('guest_email')
-                                    ->label('Email')
-                                    ->required()
-                                    ->email()
-                                    ->maxLength(255),
-                                TextInput::make('guest_phone')
-                                    ->label('Phone')
-                                    ->tel()
-                                    ->maxLength(255),
-                            ]),
-                    ]),
+                    // ── REGULAR SAILING STEPS ──
+                    Step::make('Date & Time')
+                        ->icon('heroicon-o-calendar-days')
+                        ->visible(fn (callable $get) => $get('booking_type') === 'regular')
+                        ->schema([
+                            DatePicker::make('tour_date')
+                                ->label('Select Date')
+                                ->required()
+                                ->minDate(now())
+                                ->reactive()
+                                ->afterStateUpdated(fn (callable $set) => $set('time_slot_id', null))
+                                ->columnSpanFull(),
+                            Select::make('boat_id')
+                                ->label('Boat')
+                                ->required()
+                                ->options(Boat::where('is_active', true)->pluck('name', 'id'))
+                                ->reactive()
+                                ->afterStateUpdated(fn (callable $set) => $set('time_slot_id', null)),
+                            Select::make('time_slot_id')
+                                ->label('Time Slot')
+                                ->required()
+                                ->live()
+                                ->options(function (callable $get) {
+                                    $boatId = $get('boat_id');
+                                    $date = $get('tour_date');
+                                    if (!$boatId || !$date) return [];
+                                    $day = strtolower(\Carbon\Carbon::parse($date)->format('l'));
+                                    return TimeSlot::where('boat_id', $boatId)
+                                        ->where('day', $day)
+                                        ->where('is_blocked', false)
+                                        ->get()
+                                        ->mapWithKeys(fn ($s) => [
+                                            $s->id => \Carbon\Carbon::createFromFormat('H:i:s', $s->start_time)->format('g:i A')
+                                                . ' – '
+                                                . \Carbon\Carbon::createFromFormat('H:i:s', $s->end_time)->format('g:i A')
+                                                . ' (' . $s->remainingCapacity($date) . ' spots left)',
+                                        ]);
+                                }),
+                            Placeholder::make('slot_info')
+                                ->label('')
+                                ->visible(fn (callable $get) => $get('time_slot_id'))
+                                ->content(fn (callable $get) => $get('time_slot_id') ? '✅ Slot selected' : ''),
+                        ]),
 
-                // Regular Sailing Details
-                Section::make('Sailing Details')
-                    ->visible(fn (callable $get) => $get('booking_type') === 'regular')
-                    ->schema([
-                        Select::make('boat_id')
-                            ->label('Boat')
-                            ->required()
-                            ->options(Boat::where('is_active', true)->pluck('name', 'id'))
-                            ->reactive()
-                            ->afterStateUpdated(fn (callable $set) => $set('time_slot_id', null)),
-                        DatePicker::make('tour_date')
-                            ->label('Tour Date')
-                            ->required()
-                            ->minDate(now())
-                            ->reactive()
-                            ->afterStateUpdated(fn (callable $set) => $set('time_slot_id', null)),
-                        Select::make('time_slot_id')
-                            ->label('Time Slot')
-                            ->required()
-                            ->options(function (callable $get) {
-                                $boatId = $get('boat_id');
-                                $date = $get('tour_date');
-                                if (!$boatId || !$date) return [];
-                                $day = strtolower(\Carbon\Carbon::parse($date)->format('l'));
-                                return TimeSlot::where('boat_id', $boatId)
-                                    ->where('day', $day)
-                                    ->where('is_blocked', false)
-                                    ->get()
-                                    ->mapWithKeys(fn ($s) => [
-                                        $s->id => \Carbon\Carbon::createFromFormat('H:i:s', $s->start_time)->format('g:i A')
-                                            . ' – '
-                                            . \Carbon\Carbon::createFromFormat('H:i:s', $s->end_time)->format('g:i A')
-                                            . ' (' . $s->remainingCapacity($date) . ' spots)',
-                                    ]);
-                            }),
-                        Grid::make(2)
-                            ->schema([
-                                TextInput::make('adult_count')
-                                    ->label('Adults')
-                                    ->required()
-                                    ->numeric()
-                                    ->minValue(1)
-                                    ->default(1),
-                                TextInput::make('child_count')
-                                    ->label('Children (under 12)')
-                                    ->numeric()
-                                    ->minValue(0)
-                                    ->default(0),
-                            ]),
-                    ]),
+                    Step::make('Tickets')
+                        ->icon('heroicon-o-ticket')
+                        ->visible(fn (callable $get) => $get('booking_type') === 'regular')
+                        ->schema([
+                            TextInput::make('adult_count')
+                                ->label('Adult Tickets')
+                                ->helperText('$200.00 per adult')
+                                ->required()
+                                ->numeric()
+                                ->minValue(1)
+                                ->default(1)
+                                ->reactive(),
+                            TextInput::make('child_count')
+                                ->label('Child Tickets (under 12)')
+                                ->helperText('$150.00 per child')
+                                ->numeric()
+                                ->minValue(0)
+                                ->default(0)
+                                ->reactive(),
+                            Placeholder::make('ticket_summary')
+                                ->label('Total Guests')
+                                ->content(function (callable $get) {
+                                    $adults = $get('adult_count') ?? 0;
+                                    $children = $get('child_count') ?? 0;
+                                    $total = $adults + $children;
+                                    return "{$total} guest" . ($total !== 1 ? 's' : '') . " ({$adults} adult" . ($adults !== 1 ? 's' : '') . ", {$children} child" . ($children !== 1 ? 'ren' : '') . ")";
+                                }),
+                            Placeholder::make('ticket_total')
+                                ->label('Ticket Subtotal')
+                                ->content(function (callable $get) {
+                                    $adults = ($get('adult_count') ?? 0) * 200;
+                                    $children = ($get('child_count') ?? 0) * 150;
+                                    return '$' . number_format($adults + $children, 2);
+                                }),
+                        ]),
 
-                // Private Tour Details
-                Section::make('Tour Details')
-                    ->visible(fn (callable $get) => $get('booking_type') === 'private')
-                    ->schema([
-                        DatePicker::make('confirmed_tour_date')
-                            ->label('Tour Date')
-                            ->required()
-                            ->minDate(now()),
-                        Grid::make(2)
-                            ->schema([
-                                TextInput::make('confirmed_start_time')
-                                    ->label('Start Time')
-                                    ->required()
-                                    ->placeholder('e.g. 10:00 AM'),
-                                TextInput::make('confirmed_end_time')
-                                    ->label('End Time')
-                                    ->placeholder('e.g. 1:00 PM'),
-                            ]),
-                        Grid::make(3)
-                            ->schema([
-                                TextInput::make('adult_count')
-                                    ->label('Adults')
-                                    ->required()
-                                    ->numeric()
-                                    ->minValue(1)
-                                    ->default(1),
-                                TextInput::make('child_count')
-                                    ->label('Children')
-                                    ->numeric()
-                                    ->minValue(0)
-                                    ->default(0),
-                                TextInput::make('infant_count')
-                                    ->label('Infants')
-                                    ->numeric()
-                                    ->minValue(0)
-                                    ->default(0),
-                            ]),
-                        TextInput::make('total_price_dollars')
-                            ->label('Total Price')
-                            ->required()
-                            ->numeric()
-                            ->minValue(0)
-                            ->prefix('$')
-                            ->placeholder('e.g. 500.00'),
-                    ]),
+                    Step::make('Guest Details')
+                        ->icon('heroicon-o-user')
+                        ->visible(fn (callable $get) => $get('booking_type') === 'regular')
+                        ->schema([
+                            TextInput::make('guest_first_name')
+                                ->label('First Name')
+                                ->required()
+                                ->maxLength(255),
+                            TextInput::make('guest_last_name')
+                                ->label('Last Name')
+                                ->required()
+                                ->maxLength(255),
+                            TextInput::make('guest_email')
+                                ->label('Email')
+                                ->required()
+                                ->email()
+                                ->maxLength(255),
+                            TextInput::make('guest_phone')
+                                ->label('Phone')
+                                ->tel()
+                                ->required()
+                                ->maxLength(255),
+                            Textarea::make('special_comment')
+                                ->label('Special Requests (optional)')
+                                ->rows(3)
+                                ->maxLength(1000)
+                                ->columnSpanFull(),
+                        ]),
 
-                // Add-ons
-                Section::make('Add-ons')
-                    ->schema([
-                        CheckboxList::make('addons')
-                            ->label('')
-                            ->options(function (callable $get) {
-                                $query = Addon::active()->orderBy('sort_order');
-                                if ($get('booking_type') === 'private') {
-                                    $query->forPrivateTours();
-                                } else {
-                                    $query->forRegularTours();
-                                }
-                                return $query->pluck('title', 'id');
-                            })
-                            ->columns(2)
-                            ->reactive(),
-                    ]),
+                    Step::make('Add-ons')
+                        ->icon('heroicon-o-sparkles')
+                        ->visible(fn (callable $get) => $get('booking_type') === 'regular')
+                        ->schema([
+                            CheckboxList::make('addons')
+                                ->label('')
+                                ->options(function () {
+                                    return Addon::active()
+                                        ->forRegularTours()
+                                        ->orderBy('sort_order')
+                                        ->get()
+                                        ->mapWithKeys(fn ($a) => [
+                                            $a->id => $a->title . ' — $' . number_format($a->price_cents / 100, 2)
+                                                . ($a->description ? ' (' . $a->description . ')' : ''),
+                                        ]);
+                                })
+                                ->columns(1)
+                                ->columnSpanFull(),
+                        ]),
 
-                // Notes
-                Section::make('Additional Notes')
-                    ->schema([
-                        Textarea::make('occasion_details')
-                            ->label('Special Occasion Details')
-                            ->rows(2)
-                            ->maxLength(500)
-                            ->visible(fn (callable $get) => $get('booking_type') === 'private'),
-                        Textarea::make('admin_notes')
-                            ->label('Internal Notes (not shown to guest)')
-                            ->rows(2)
-                            ->maxLength(1000)
-                            ->visible(fn (callable $get) => $get('booking_type') === 'private'),
-                        Textarea::make('special_comment')
-                            ->label('Special Requests / Notes')
-                            ->rows(3)
-                            ->maxLength(1000)
-                            ->visible(fn (callable $get) => $get('booking_type') === 'regular'),
-                    ]),
+                    Step::make('Review & Create')
+                        ->icon('heroicon-o-check-circle')
+                        ->visible(fn (callable $get) => $get('booking_type') === 'regular')
+                        ->schema([
+                            Placeholder::make('review_regular')
+                                ->label('Booking Summary')
+                                ->content(function (callable $get) {
+                                    $adults = $get('adult_count') ?? 0;
+                                    $children = $get('child_count') ?? 0;
+                                    $adultTotal = $adults * 200;
+                                    $childTotal = $children * 150;
+                                    $subtotal = $adultTotal + $childTotal;
+                                    $totalGuests = $adults + $children;
+
+                                    $addonTotal = 0;
+                                    $addonLines = [];
+                                    if (!empty($get('addons'))) {
+                                        foreach ($get('addons') as $addonId) {
+                                            $addon = Addon::find($addonId);
+                                            if ($addon) {
+                                                $addonLineTotal = $addon->price_cents / 100 * $totalGuests;
+                                                $addonTotal += $addonLineTotal;
+                                                $addonLines[] = "  • {$addon->title}: {$totalGuests}× $" . number_format($addon->price_cents / 100, 2) . " = $" . number_format($addonLineTotal, 2);
+                                            }
+                                        }
+                                    }
+
+                                    $lines = [
+                                        "Type: Regular Sailing",
+                                        "Date: " . ($get('tour_date') ? \Carbon\Carbon::parse($get('tour_date'))->format('F j, Y') : '—'),
+                                        "Guests: {$totalGuests} ({$adults} adults, {$children} children)",
+                                        "Tickets: \${$adultTotal}.00 + \${$childTotal}.00 = \${$subtotal}.00",
+                                    ];
+                                    if ($addonLines) {
+                                        $lines[] = "Add-ons:";
+                                        $lines = array_merge($lines, $addonLines);
+                                        $lines[] = "Add-on Total: \$" . number_format($addonTotal, 2);
+                                    }
+                                    $grandTotal = $subtotal + $addonTotal;
+                                    $lines[] = "";
+                                    $lines[] = "Primary Guest: " . ($get('guest_first_name') ?? '') . " " . ($get('guest_last_name') ?? '');
+                                    $lines[] = "Email: " . ($get('guest_email') ?? '');
+                                    $lines[] = "Phone: " . ($get('guest_phone') ?? '');
+                                    if ($get('special_comment')) {
+                                        $lines[] = "Notes: " . $get('special_comment');
+                                    }
+                                    $lines[] = "";
+                                    $lines[] = "━━━ TOTAL: \$" . number_format($grandTotal, 2) . " ━━━";
+
+                                    return implode("\n", $lines);
+                                })
+                                ->columnSpanFull(),
+                        ])
+                        ->afterValidation(function () {
+                            $data = $this->form->getState();
+                            $this->createRegularBooking($data);
+                        }),
+
+                    // ── PRIVATE TOUR STEPS ──
+                    Step::make('Party Size')
+                        ->icon('heroicon-o-users')
+                        ->visible(fn (callable $get) => $get('booking_type') === 'private')
+                        ->schema([
+                            TextInput::make('adult_count')
+                                ->label('Adults')
+                                ->required()
+                                ->numeric()
+                                ->minValue(1)
+                                ->default(1)
+                                ->reactive(),
+                            TextInput::make('child_count')
+                                ->label('Children (under 12)')
+                                ->numeric()
+                                ->minValue(0)
+                                ->default(0)
+                                ->reactive(),
+                            TextInput::make('infant_count')
+                                ->label('Infants (free)')
+                                ->numeric()
+                                ->minValue(0)
+                                ->default(0)
+                                ->reactive(),
+                            Placeholder::make('party_summary')
+                                ->label('Total Party Size')
+                                ->content(function (callable $get) {
+                                    $total = ($get('adult_count') ?? 0) + ($get('child_count') ?? 0) + ($get('infant_count') ?? 0);
+                                    return "{$total} guest" . ($total !== 1 ? 's' : '');
+                                }),
+                        ]),
+
+                    Step::make('Tour Details')
+                        ->icon('heroicon-o-map-pin')
+                        ->visible(fn (callable $get) => $get('booking_type') === 'private')
+                        ->schema([
+                            DatePicker::make('confirmed_tour_date')
+                                ->label('Tour Date')
+                                ->required()
+                                ->minDate(now()),
+                            TextInput::make('confirmed_start_time')
+                                ->label('Start Time')
+                                ->required()
+                                ->placeholder('e.g. 10:00 AM'),
+                            TextInput::make('confirmed_end_time')
+                                ->label('End Time')
+                                ->placeholder('e.g. 1:00 PM'),
+                            TextInput::make('total_price_dollars')
+                                ->label('Total Price ($)')
+                                ->required()
+                                ->numeric()
+                                ->minValue(0)
+                                ->prefix('$')
+                                ->helperText('Set the total price for the private tour booking'),
+                        ]),
+
+                    Step::make('Contact Details')
+                        ->icon('heroicon-o-user')
+                        ->visible(fn (callable $get) => $get('booking_type') === 'private')
+                        ->schema([
+                            TextInput::make('guest_first_name')
+                                ->label('First Name')
+                                ->required()
+                                ->maxLength(255),
+                            TextInput::make('guest_last_name')
+                                ->label('Last Name')
+                                ->required()
+                                ->maxLength(255),
+                            TextInput::make('guest_email')
+                                ->label('Email')
+                                ->required()
+                                ->email()
+                                ->maxLength(255),
+                            TextInput::make('guest_phone')
+                                ->label('Phone')
+                                ->tel()
+                                ->required()
+                                ->maxLength(255),
+                            Textarea::make('occasion_details')
+                                ->label('Special Occasion (optional)')
+                                ->rows(2)
+                                ->maxLength(500)
+                                ->columnSpanFull(),
+                        ]),
+
+                    Step::make('Add-ons')
+                        ->icon('heroicon-o-sparkles')
+                        ->visible(fn (callable $get) => $get('booking_type') === 'private')
+                        ->schema([
+                            CheckboxList::make('addons')
+                                ->label('')
+                                ->options(function () {
+                                    return Addon::active()
+                                        ->forPrivateTours()
+                                        ->orderBy('sort_order')
+                                        ->get()
+                                        ->mapWithKeys(fn ($a) => [
+                                            $a->id => $a->title . ($a->private_price_cents ? ' — $' . number_format($a->private_price_cents / 100, 2) : '')
+                                                . ($a->description ? ' (' . $a->description . ')' : ''),
+                                        ]);
+                                })
+                                ->columns(1)
+                                ->columnSpanFull(),
+                        ]),
+
+                    Step::make('Review & Create')
+                        ->icon('heroicon-o-check-circle')
+                        ->visible(fn (callable $get) => $get('booking_type') === 'private')
+                        ->schema([
+                            Placeholder::make('review_private')
+                                ->label('Private Tour Summary')
+                                ->content(function (callable $get) {
+                                    $adults = $get('adult_count') ?? 0;
+                                    $children = $get('child_count') ?? 0;
+                                    $infants = $get('infant_count') ?? 0;
+                                    $total = $adults + $children + $infants;
+
+                                    $lines = [
+                                        "Type: Private Tour",
+                                        "Date: " . ($get('confirmed_tour_date') ? \Carbon\Carbon::parse($get('confirmed_tour_date'))->format('F j, Y') : '—'),
+                                        "Time: " . ($get('confirmed_start_time') ?? '—') . ($get('confirmed_end_time') ? ' – ' . $get('confirmed_end_time') : ''),
+                                        "Party: {$total} ({$adults} adults, {$children} children, {$infants} infants)",
+                                        "Price: \$" . number_format($get('total_price_dollars') ?? 0, 2),
+                                    ];
+
+                                    if (!empty($get('addons'))) {
+                                        $lines[] = "Add-ons included.";
+                                    }
+
+                                    $lines[] = "";
+                                    $lines[] = "Contact: " . ($get('guest_first_name') ?? '') . " " . ($get('guest_last_name') ?? '');
+                                    $lines[] = "Email: " . ($get('guest_email') ?? '');
+                                    $lines[] = "Phone: " . ($get('guest_phone') ?? '');
+                                    if ($get('occasion_details')) {
+                                        $lines[] = "Occasion: " . $get('occasion_details');
+                                    }
+
+                                    $lines[] = "";
+                                    $lines[] = "━━━ TOTAL: \$" . number_format($get('total_price_dollars') ?? 0, 2) . " ━━━";
+
+                                    return implode("\n", $lines);
+                                })
+                                ->columnSpanFull(),
+                            Textarea::make('admin_notes')
+                                ->label('Internal Notes (not shown to guest)')
+                                ->rows(2)
+                                ->maxLength(1000)
+                                ->columnSpanFull(),
+                        ])
+                        ->afterValidation(function () {
+                            $data = $this->form->getState();
+                            $this->createPrivateBooking($data);
+                        }),
+                ])
+                    ->startOnStep(fn (callable $get) => ($get('booking_type') === 'regular') ? 1 : 1)
+                    ->submitAction(fn () => null)
+                    ->skippable(false)
+                    ->columnSpanFull(),
             ])
             ->statePath('formData');
-    }
-
-    public function createBooking(): void
-    {
-        $data = $this->form->getState();
-
-        if ($data['booking_type'] === 'regular') {
-            $this->createRegularBooking($data);
-        } else {
-            $this->createPrivateBooking($data);
-        }
     }
 
     protected function createRegularBooking(array $data): void
@@ -265,7 +443,7 @@ class MakeBooking extends Page
                     ->sum(fn ($b) => $b->items->sum('quantity'));
 
                 if ($existingBooked + $totalGuests > $timeSlot->max_capacity) {
-                    throw new \Exception('This time slot is full.');
+                    throw new \Exception('This time slot is full. ' . $timeSlot->remainingCapacity($data['tour_date']) . ' spots remaining.');
                 }
 
                 $adultPrice = 20000;
@@ -346,17 +524,19 @@ class MakeBooking extends Page
             }
 
             Notification::make()
-                ->title('Booking Created')
-                ->body("Regular sailing booked: {$result->booking_ref}")
+                ->title('Booking Created!')
+                ->body("Regular sailing booked: **{$result->booking_ref}** — " . \Carbon\Carbon::parse($result->tour_date)->format('F j, Y'))
                 ->success()
+                ->persistent()
                 ->send();
 
             $this->form->fill(['booking_type' => 'regular']);
         } catch (\Exception $e) {
             Notification::make()
-                ->title('Error')
+                ->title('Booking Failed')
                 ->body($e->getMessage())
                 ->danger()
+                ->persistent()
                 ->send();
         }
     }
@@ -468,17 +648,19 @@ class MakeBooking extends Page
             }
 
             Notification::make()
-                ->title('Private Tour Booked')
-                ->body("Private tour booked: {$result['ptr']->booking_ref}")
+                ->title('Private Tour Booked!')
+                ->body("Private tour booked: **{$result['ptr']->booking_ref}** — " . \Carbon\Carbon::parse($data['confirmed_tour_date'])->format('F j, Y'))
                 ->success()
+                ->persistent()
                 ->send();
 
             $this->form->fill(['booking_type' => 'regular']);
         } catch (\Exception $e) {
             Notification::make()
-                ->title('Error')
+                ->title('Booking Failed')
                 ->body($e->getMessage())
                 ->danger()
+                ->persistent()
                 ->send();
         }
     }
