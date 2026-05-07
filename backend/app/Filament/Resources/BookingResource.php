@@ -12,7 +12,20 @@ use Filament\Tables\Table;
 
 class BookingResource extends Resource
 {
-        public static function canViewAny(): bool
+    public static function canViewAny(): bool
+    {
+        $user = auth()->user();
+        return $user && in_array($user->role, ['admin', 'super_admin', 'agent']);
+    }
+
+    public static function canCreate(): bool
+    {
+        // Agents use the MakeBooking page, not the standard create
+        $user = auth()->user();
+        return $user && in_array($user->role, ['admin', 'super_admin']);
+    }
+
+    public static function canDelete(\Illuminate\Database\Eloquent\Model $record): bool
     {
         $user = auth()->user();
         return $user && in_array($user->role, ['admin', 'super_admin']);
@@ -60,7 +73,8 @@ class BookingResource extends Resource
                                 'confirmed' => 'Confirmed',
                                 'cancelled' => 'Cancelled',
                                 'completed' => 'Completed',
-                            ]),
+                            ])
+                            ->disabled(fn () => auth()->user()?->isAgent()),
                     ])
                     ->columns(2),
 
@@ -193,11 +207,13 @@ class BookingResource extends Resource
                         ->openUrlInNewTab()
                     )
                     ->modalCancelActionLabel('Close'),
-                Tables\Actions\EditAction::make(),
+                Tables\Actions\EditAction::make()
+                    ->visible(fn () => !auth()->user()?->isAgent()),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
+                    Tables\Actions\DeleteBulkAction::make()
+                        ->visible(fn () => !auth()->user()?->isAgent()),
                 ]),
             ])
             ->defaultSort('created_at', 'desc');
