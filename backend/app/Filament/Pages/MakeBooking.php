@@ -13,15 +13,13 @@ use App\Models\TimeSlot;
 use App\Services\EmailService;
 use App\Services\FeeService;
 use Filament\Forms\Components\CheckboxList;
+use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\DatePicker;
-use Filament\Forms\Components\Grid;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Section;
-use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\ViewField;
 use Filament\Forms\Components\Wizard;
 use Filament\Forms\Components\Wizard\Step;
 use Filament\Forms\Form;
@@ -62,6 +60,7 @@ class MakeBooking extends Page
         return $form
             ->schema([
                 Wizard::make([
+
                     // ── Step 0: Choose Booking Type ──
                     Step::make('Booking Type')
                         ->icon('heroicon-o-arrow-right-start-on-rectangle')
@@ -77,50 +76,120 @@ class MakeBooking extends Page
                                 ->columnSpanFull(),
                         ]),
 
-                    // ── REGULAR SAILING STEPS ──
-                    Step::make('Date & Time')
+                    // ═══════════════════════════════════════════
+                    // REGULAR SAILING WIZARD
+                    // ═══════════════════════════════════════════
+
+                    // Step 1: Pick Date
+                    Step::make('Date')
                         ->icon('heroicon-o-calendar-days')
                         ->visible(fn (callable $get) => $get('booking_type') === 'regular')
                         ->schema([
+                            Placeholder::make('date_hint')
+                                ->label('')
+                                ->content('Pick the date for the sailing.'),
                             DatePicker::make('tour_date')
-                                ->label('Select Date')
+                                ->label('Tour Date')
                                 ->required()
                                 ->minDate(now())
                                 ->reactive()
                                 ->afterStateUpdated(fn (callable $set) => $set('time_slot_id', null))
-                                ->columnSpanFull(),
-                            Select::make('boat_id')
-                                ->label('Boat')
-                                ->required()
-                                ->options(Boat::where('is_active', true)->pluck('name', 'id'))
-                                ->reactive()
-                                ->afterStateUpdated(fn (callable $set) => $set('time_slot_id', null)),
-                            Select::make('time_slot_id')
-                                ->label('Time Slot')
-                                ->required()
+                                ->columnSpanFull()
                                 ->live()
-                                ->options(function (callable $get) {
-                                    $boatId = $get('boat_id');
+                                ->afterStateUpdated(function (callable $set, callable $get) {
+                                    // Pre-load available boats for this day
                                     $date = $get('tour_date');
-                                    if (!$boatId || !$date) return [];
-                                    $day = strtolower(\Carbon\Carbon::parse($date)->format('l'));
-                                    return TimeSlot::where('boat_id', $boatId)
-                                        ->where('day', $day)
-                                        ->where('is_blocked', false)
-                                        ->get()
-                                        ->mapWithKeys(fn ($s) => [
-                                            $s->id => \Carbon\Carbon::createFromFormat('H:i:s', $s->start_time)->format('g:i A')
-                                                . ' – '
-                                                . \Carbon\Carbon::createFromFormat('H:i:s', $s->end_time)->format('g:i A')
-                                                . ' (' . $s->remainingCapacity($date) . ' spots left)',
-                                        ]);
+                                    if ($date) {
+                                        $day = strtolower(\Carbon\Carbon::parse($date)->format('l'));
+                                        $boats = TimeSlot::where('day', $day)
+                                            ->where('is_blocked', false)
+                                            ->distinct()
+                                            ->pluck('boat_id');
+                                        $boatOptions = Boat::whereIn('id', $boats)
+                                            ->where('is_active', true)
+                                            ->pluck('name', 'id');
+                                        if ($boatOptions->count() === 1) {
+                                            $set('boat_id', $boatOptions->keys()->first());
+                                        }
+                                    }
                                 }),
-                            Placeholder::make('slot_info')
-                                ->label('')
-                                ->visible(fn (callable $get) => $get('time_slot_id'))
-                                ->content(fn (callable $get) => $get('time_slot_id') ? '✅ Slot selected' : ''),
+                            Placeholder::make('date_display')
+                                ->label('Selected')
+                                ->visible(fn (callable $get) => $get('tour_date'))
+                                ->content(fn (callable $get) => $get('tour_date')
+                                    ? \Carbon\Carbon::parse($get('tour_date'))->format('l, F j, Y')
+                                    : ''),
                         ]),
 
+                    // Step 2: Pick Time Slot (card-style)
+                    Step::make('Time Slot')
+                        ->icon('heroicon-o-clock')
+                        ->visible(fn (callable $get) => $get('booking_type') === 'regular')
+                        ->schema([
+                            Placeholder::make('time_slot_header')
+                                ->label('')
+                                ->visible(fn (callable $get) => $get('tour_date'))
+                                ->content(fn (callable $get) => $get('tour_date')
+                                    ? 'Available times for ' . \Carbon\Carbon::parse($get('tour_date'))->format('l, F j, Y')
+                                    : 'Please select a date first.'),
+                            Placeholder::make('no_date_warning')
+                                ->label('')
+                                ->visible(fn (callable $get) => !$get('tour_date'))
+                                ->content('⚠️ Go back and select a date first.')
+                                ->extraAttributes(['class' => 'text-warning']),
+                            Radio::make('time_slot_id')
+                                ->label('Available Departures')
+                                ->required()
+                                ->visible(fn (callable $get) => $get('tour_date'))
+                                ->options(function (callable $get) {
+                                    $date = $get('tour_date');
+                                    if (!$date) return [];
+                                    $day = strtolower(\Carbon\Carbon::parse($date)->format('l'));
+                                    $slots = TimeSlot::where('day', $day)
+                                        ->where('is_blocked', false)
+                                        ->with('boat')
+                                        ->get();
+                                    return $slots->mapWithKeys(function ($s) use ($date) {
+                                        $cap = $s->remainingCapacity($date);
+                                        $boatName = $s->boat?->name ?? 'Boat';
+                                        $time = \Carbon\Carbon::createFromFormat('H:i:s', $s->start_time)->format('g:i A')
+                                            . ' – '
+                                            . \Carbon\Carbon::createFromFormat('H:i:s', $s->end_time)->format('g:i A');
+                                        $label = "🚢 {$boatName}  •  {$time}  •  {$cap} spots left";
+                                        return [$s->id => $label];
+                                    });
+                                })
+                                ->descriptions(function (callable $get) {
+                                    $date = $get('tour_date');
+                                    if (!$date) return [];
+                                    $day = strtolower(\Carbon\Carbon::parse($date)->format('l'));
+                                    $slots = TimeSlot::where('day', $day)
+                                        ->where('is_blocked', false)
+                                        ->get();
+                                    return $slots->mapWithKeys(function ($s) use ($date) {
+                                        $cap = $s->remainingCapacity($date);
+                                        $total = $s->max_capacity;
+                                        return [$s->id => "{$cap} of {$total} spots available"];
+                                    });
+                                })
+                                ->gridDirection('row')
+                                ->columns(1)
+                                ->columnSpanFull()
+                                ->live()
+                                ->afterStateUpdated(function (callable $set, callable $get) {
+                                    $slotId = $get('time_slot_id');
+                                    if ($slotId) {
+                                        $slot = TimeSlot::find($slotId);
+                                        if ($slot) {
+                                            $set('boat_id', $slot->boat_id);
+                                        }
+                                    }
+                                }),
+                            Hidden::make('boat_id')
+                                ->default(null),
+                        ]),
+
+                    // Step 3: Tickets
                     Step::make('Tickets')
                         ->icon('heroicon-o-ticket')
                         ->visible(fn (callable $get) => $get('booking_type') === 'regular')
@@ -157,6 +226,7 @@ class MakeBooking extends Page
                                 }),
                         ]),
 
+                    // Step 4: Guest Details
                     Step::make('Guest Details')
                         ->icon('heroicon-o-user')
                         ->visible(fn (callable $get) => $get('booking_type') === 'regular')
@@ -186,6 +256,7 @@ class MakeBooking extends Page
                                 ->columnSpanFull(),
                         ]),
 
+                    // Step 5: Add-ons
                     Step::make('Add-ons')
                         ->icon('heroicon-o-sparkles')
                         ->visible(fn (callable $get) => $get('booking_type') === 'regular')
@@ -206,6 +277,7 @@ class MakeBooking extends Page
                                 ->columnSpanFull(),
                         ]),
 
+                    // Step 6: Review & Create
                     Step::make('Review & Create')
                         ->icon('heroicon-o-check-circle')
                         ->visible(fn (callable $get) => $get('booking_type') === 'regular')
@@ -219,6 +291,17 @@ class MakeBooking extends Page
                                     $childTotal = $children * 150;
                                     $subtotal = $adultTotal + $childTotal;
                                     $totalGuests = $adults + $children;
+
+                                    // Get slot info
+                                    $slotInfo = '';
+                                    $slot = $get('time_slot_id') ? TimeSlot::find($get('time_slot_id')) : null;
+                                    if ($slot) {
+                                        $boatName = $slot->boat?->name ?? 'Boat';
+                                        $timeStr = \Carbon\Carbon::createFromFormat('H:i:s', $slot->start_time)->format('g:i A')
+                                            . ' – '
+                                            . \Carbon\Carbon::createFromFormat('H:i:s', $slot->end_time)->format('g:i A');
+                                        $slotInfo = "Boat: {$boatName}\nTime: {$timeStr}";
+                                    }
 
                                     $addonTotal = 0;
                                     $addonLines = [];
@@ -236,11 +319,12 @@ class MakeBooking extends Page
                                     $lines = [
                                         "Type: Regular Sailing",
                                         "Date: " . ($get('tour_date') ? \Carbon\Carbon::parse($get('tour_date'))->format('F j, Y') : '—'),
-                                        "Guests: {$totalGuests} ({$adults} adults, {$children} children)",
-                                        "Tickets: \${$adultTotal}.00 + \${$childTotal}.00 = \${$subtotal}.00",
                                     ];
+                                    if ($slotInfo) $lines[] = $slotInfo;
+                                    $lines[] = "Guests: {$totalGuests} ({$adults} adults, {$children} children)";
+                                    $lines[] = "Tickets: \${$adultTotal}.00 + \${$childTotal}.00 = \${$subtotal}.00";
                                     if ($addonLines) {
-                                        $lines[] = "Add-ons:";
+                                        $lines[] = "\nAdd-ons:";
                                         $lines = array_merge($lines, $addonLines);
                                         $lines[] = "Add-on Total: \$" . number_format($addonTotal, 2);
                                     }
@@ -264,7 +348,10 @@ class MakeBooking extends Page
                             $this->createRegularBooking($data);
                         }),
 
-                    // ── PRIVATE TOUR STEPS ──
+                    // ═══════════════════════════════════════════
+                    // PRIVATE TOUR WIZARD
+                    // ═══════════════════════════════════════════
+
                     Step::make('Party Size')
                         ->icon('heroicon-o-users')
                         ->visible(fn (callable $get) => $get('booking_type') === 'private')
@@ -419,7 +506,7 @@ class MakeBooking extends Page
                         }),
                 ])
                     ->startOnStep(fn (callable $get) => ($get('booking_type') === 'regular') ? 1 : 1)
-                    ->submitAction(fn () => null)
+                    ->submitAction('')
                     ->skippable(false)
                     ->columnSpanFull(),
             ])
