@@ -8,6 +8,7 @@ use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
+use Illuminate\Database\Eloquent\Builder;
 use Filament\Tables\Table;
 
 class BookingResource extends Resource
@@ -15,7 +16,12 @@ class BookingResource extends Resource
     public static function canViewAny(): bool
     {
         $user = auth()->user();
-        return $user && in_array($user->role, ['admin', 'super_admin', 'agent']);
+        return $user && in_array($user->role, ['admin', 'super_admin']);
+    }
+
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()->where('source_type', '!=', 'agent');
     }
 
     public static function canCreate(): bool

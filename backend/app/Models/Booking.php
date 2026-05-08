@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\BookingAgent;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
@@ -30,6 +31,7 @@ class Booking extends Model
         'id', 'booking_ref', 'source_type', 'tour_date', 'time_slot_id', 'status',
         'photo_upgrade_count', 'special_occasion', 'special_comment',
         'total_price_cents', 'fees_cents', 'is_confirmed', 'needs_confirmation',
+        'booking_agent_id', 'commission_cents', 'commission_percent', 'sales_rep_name',
     ];
 
     protected $appends = ['guests_count', 'complete_guests_count', 'grand_total'];
@@ -38,6 +40,8 @@ class Booking extends Model
         'tour_date' => 'date',
         'is_confirmed' => 'boolean',
         'needs_confirmation' => 'boolean',
+        'commission_percent' => 'decimal:2',
+        'commission_cents' => 'integer',
     ];
 
     protected static function booted(): void
@@ -47,16 +51,17 @@ class Booking extends Model
                 $booking->id = (string) Str::uuid();
             }
             if (empty($booking->booking_ref)) {
-                $booking->booking_ref = self::generateRef();
+                $prefix = $booking->source_type === 'agent' ? 'AGT' : 'CBB';
+                $booking->booking_ref = self::generateRef($prefix);
             }
         });
     }
 
-    public static function generateRef(): string
+    public static function generateRef(string $prefix = 'CBB'): string
     {
         $date = now()->format('Ymd');
         $token = strtoupper(substr(bin2hex(random_bytes(3)), 0, 4));
-        return "CBB-{$date}-{$token}";
+        return "{$prefix}-{$date}-{$token}";
     }
 
     public function timeSlot()
@@ -102,6 +107,11 @@ class Booking extends Model
         }
         $allowed = self::TRANSITIONS[$this->status] ?? [];
         return in_array($newStatus, $allowed, true);
+    }
+
+    public function bookingAgent()
+    {
+        return $this->belongsTo(BookingAgent::class);
     }
 
     public function scopeIncomplete($query)
