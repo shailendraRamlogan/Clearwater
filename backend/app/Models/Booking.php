@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\BookingAgent;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
@@ -31,7 +32,9 @@ class Booking extends Model
         'id', 'booking_ref', 'source_type', 'tour_date', 'time_slot_id', 'status',
         'photo_upgrade_count', 'special_occasion', 'special_comment',
         'total_price_cents', 'fees_cents', 'is_confirmed', 'needs_confirmation',
+        'total_guests',
         'booking_agent_id', 'commission_cents', 'commission_percent', 'sales_rep_name',
+        'rebooked_from_booking_id', 'rebooked_at', 'rebooked_by', 'rebook_fee_cents',
     ];
 
     protected $appends = ['guests_count', 'complete_guests_count', 'grand_total'];
@@ -42,6 +45,8 @@ class Booking extends Model
         'needs_confirmation' => 'boolean',
         'commission_percent' => 'decimal:2',
         'commission_cents' => 'integer',
+        'rebooked_at' => 'datetime',
+        'rebook_fee_cents' => 'integer',
     ];
 
     protected static function booted(): void
@@ -79,7 +84,7 @@ class Booking extends Model
         return $this->hasMany(BookingItem::class);
     }
 
-        public function addons()
+    public function addons()
     {
         return $this->hasMany(BookingAddon::class);
     }
@@ -92,6 +97,27 @@ class Booking extends Model
     public function primaryGuest()
     {
         return $this->hasOne(BookingGuest::class)->where('is_primary', true);
+    }
+
+    public function bookingAgent()
+    {
+        return $this->belongsTo(BookingAgent::class);
+    }
+
+    // Rebook relationships
+    public function originalBooking()
+    {
+        return $this->belongsTo(Booking::class, 'rebooked_from_booking_id');
+    }
+
+    public function rebookedBooking()
+    {
+        return $this->hasOne(Booking::class, 'rebooked_from_booking_id');
+    }
+
+    public function rebookedBy()
+    {
+        return $this->belongsTo(User::class, 'rebooked_by');
     }
 
     public function isComplete(): bool
@@ -107,11 +133,6 @@ class Booking extends Model
         }
         $allowed = self::TRANSITIONS[$this->status] ?? [];
         return in_array($newStatus, $allowed, true);
-    }
-
-    public function bookingAgent()
-    {
-        return $this->belongsTo(BookingAgent::class);
     }
 
     public function scopeIncomplete($query)

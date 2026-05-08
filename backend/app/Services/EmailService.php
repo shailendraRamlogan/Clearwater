@@ -895,4 +895,92 @@ HTML;
         }
         return $html;
     }
+
+    public function sendRebookFeeRequest(Booking $booking, string $paymentLink): void
+    {
+        $booking->loadMissing(['primaryGuest', 'originalBooking']);
+        $guest = $booking->primaryGuest;
+        $original = $booking->originalBooking;
+
+        if (!$guest || !config('services.resend.key')) {
+            return;
+        }
+
+        $feeDisplay = '$' . number_format($booking->rebook_fee_cents / 100, 2);
+        $originalDate = $original?->tour_date?->format('l, F j, Y') ?? 'N/A';
+        $newDate = $booking->tour_date->format('l, F j, Y');
+
+        $html = <<<HTML
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body style="margin:0; padding:0; background-color:#f9fafb; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb; min-height:100vh;">
+        <tr>
+            <td align="center" style="padding:40px 20px;">
+                <table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px; background:#ffffff; border-radius:16px; box-shadow:0 1px 3px rgba(0,0,0,0.1); overflow:hidden;">
+                    <tr>
+                        <td style="padding:32px 32px 0; text-align:center;">
+                            <h1 style="margin:0 0 8px; font-size:22px; font-weight:700; color:#111827;">Rescheduling Fee</h1>
+                            <p style="margin:0; font-size:14px; color:#6b7280;">Clear Boat Bahamas</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:24px 32px;">
+                            <p style="margin:0 0 16px; font-size:15px; color:#374151; line-height:1.6;">Hi {$guest->first_name},</p>
+                            <p style="margin:0 0 16px; font-size:15px; color:#374151; line-height:1.6;">Your booking has been rescheduled from <strong>{$originalDate}</strong> to <strong>{$newDate}</strong>.</p>
+                            <p style="margin:0 0 24px; font-size:15px; color:#374151; line-height:1.6;">A rescheduling fee of <strong>{$feeDisplay}</strong> applies. Please complete the payment below.</p>
+                            <table width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td align="center" style="padding:16px 0;">
+                                        <a href="{$paymentLink}" style="display:inline-block; background-color:#0d9488; color:#ffffff; padding:14px 40px; border-radius:8px; text-decoration:none; font-weight:600; font-size:16px;">Pay {$feeDisplay}</a>
+                                    </td>
+                                </tr>
+                            </table>
+                            <p style="margin:16px 0 0; font-size:13px; color:#9ca3af; text-align:center;">This link expires in 7 days. Your new booking reference is <strong>{$booking->booking_ref}</strong>.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:16px 32px 24px; text-align:center; border-top:1px solid #f3f4f6;">
+                            <p style="margin:0; font-size:12px; color:#9ca3af;">Clear Boat Bahamas &middot; Nassau, The Bahamas</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+HTML;
+
+        try {
+            $result = Resend::emails()->send([
+                'from' => 'Clear Boat Bahamas <bookings@mail.clearboatbahamas.com>',
+                'to' => [$guest->email],
+                'subject' => "Rescheduling Fee — {$booking->booking_ref}",
+                'html' => $html,
+            ]);
+
+            EmailLog::create([
+                'booking_id' => $booking->id,
+                'recipient' => $guest->email,
+                'subject' => "Rescheduling Fee — {$booking->booking_ref}",
+                'template' => 'rebook_fee_request',
+                'resend_id' => $result->id ?? null,
+                'status' => 'sent',
+            ]);
+        } catch (\Exception $e) {
+            EmailLog::create([
+                'booking_id' => $booking->id,
+                'recipient' => $guest->email,
+                'subject' => "Rescheduling Fee — {$booking->booking_ref}",
+                'template' => 'rebook_fee_request',
+                'status' => 'failed',
+            ]);
+            throw $e;
+        }
+    }
 }
