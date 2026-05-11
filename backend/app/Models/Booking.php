@@ -60,6 +60,16 @@ class Booking extends Model
                 $booking->booking_ref = self::generateRef($prefix);
             }
         });
+
+        static::saved(function (Booking $booking) {
+            // Auto-sync total_guests from booking items
+            $itemTotal = $booking->items()->sum('quantity');
+            if ($booking->total_guests != $itemTotal) {
+                $booking->withoutEvents(function () use ($booking, $itemTotal) {
+                    $booking->update(['total_guests' => $itemTotal]);
+                });
+            }
+        });
     }
 
     public static function generateRef(string $prefix = 'CBB'): string

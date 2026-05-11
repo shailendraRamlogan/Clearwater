@@ -38,6 +38,9 @@ class BookingResource extends JsonResource
                     'display' => $fee->displayValue(),
                 ])->values()->all();
             }),
+            'is_agent_booking' => !empty($this->booking_agent_id),
+            'customer_total_cents' => ($this->total_price_cents ?? 0),
+            'rebook_fee_cents' => $this->rebook_fee_cents ?? 0,
             'status' => $this->status,
             'is_confirmed' => $this->status === 'confirmed',
             'complete_guests_count' => $this->whenLoaded('guests', fn () => 1 + $this->guests->where('is_primary', false)->where('last_name', '!=', '')->where('email', '!=', '')->count()),

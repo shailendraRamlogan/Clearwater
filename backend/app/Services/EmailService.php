@@ -14,9 +14,35 @@ class EmailService
         private TicketService $ticketService,
     ) {}
 
+
+    /**
+     * Generate a ticket PDF attachment for a booking in Resend format.
+     * Returns null if PDF generation fails.
+     */
+    private function generateTicketAttachment(Booking $booking): ?array
+    {
+        try {
+            $pdfBytes = $this->ticketService->generateTicketPdf($booking);
+            $filename = $booking->booking_ref . '-tickets.pdf';
+
+            return [
+                'filename' => $filename,
+                'content' => base64_encode($pdfBytes),
+                'content_type' => 'application/pdf',
+            ];
+        } catch (\Throwable $e) {
+            \Log::warning('Failed to generate ticket PDF attachment', [
+                'booking_id' => $booking->id,
+                'booking_ref' => $booking->booking_ref,
+                'error' => $e->getMessage(),
+            ]);
+            return null;
+        }
+    }
+
     public function sendConfirmation(Booking $booking, ?string $displayRef = null): void
     {
-        $booking->loadMissing(['primaryGuest', 'timeSlot.boat', 'items', 'addons.addon']);
+        $booking->loadMissing(['primaryGuest', 'timeSlot.boat', 'items', 'addons.addon', 'bookingAgent']);
         $guest = $booking->primaryGuest;
         $ref = $displayRef ?? $booking->booking_ref;
 
@@ -25,14 +51,21 @@ class EmailService
         }
 
         $allComplete = true  /* always downloadable */;
+        $isAgentBooking = !empty($booking->booking_agent_id);
 
         try {
-            $result = Resend::emails()->send([
+            $emailPayload = [
                 'from' => 'Clear Boat Bahamas <bookings@mail.clearboatbahamas.com>',
                 'to' => [$guest->email],
                 'subject' => "Booking Confirmed — {$ref}",
-                'html' => $this->buildReceiptHtml($booking, $allComplete, $ref),
-            ]);
+                'html' => $this->buildReceiptHtml($booking, $allComplete, $ref, $isAgentBooking),
+            ];
+
+            if ($attachment = $this->generateTicketAttachment($booking)) {
+                $emailPayload['attachments'] = [$attachment];
+            }
+
+            $result = Resend::emails()->send($emailPayload);
 
             EmailLog::create([
                 'booking_id' => $booking->id,
@@ -53,6 +86,39 @@ class EmailService
                 'status' => 'failed',
             ]);
             throw $e;
+        }
+
+        // Send agent copy if this is an agent booking
+        if ($isAgentBooking && $booking->bookingAgent && $booking->bookingAgent->email) {
+            try {
+                $agentEmailPayload = [
+                    'from' => 'Clear Boat Bahamas <bookings@mail.clearboatbahamas.com>',
+                    'to' => [$booking->bookingAgent->email],
+                    'subject' => "Booking Confirmed (Agent Copy) — {$ref}",
+                    'html' => $this->buildReceiptHtml($booking, $allComplete, $ref, $isAgentBooking, true),
+                ];
+
+                if ($attachment) {
+                    $agentEmailPayload['attachments'] = [$attachment];
+                }
+
+                $agentResult = Resend::emails()->send($agentEmailPayload);
+
+                EmailLog::create([
+                    'booking_id' => $booking->id,
+                    'recipient' => $booking->bookingAgent->email,
+                    'subject' => "Booking Confirmed (Agent Copy) — {$ref}",
+                    'template' => 'agent_booking_receipt',
+                    'resend_id' => $agentResult->id ?? null,
+                    'status' => 'sent',
+                ]);
+            } catch (\Exception $e) {
+                \Log::warning('Failed to send agent booking confirmation email', [
+                    'booking_id' => $booking->id,
+                    'agent_email' => $booking->bookingAgent->email,
+                    'error' => $e->getMessage(),
+                ]);
+            }
         }
     }
 
@@ -94,7 +160,7 @@ class EmailService
         }
     }
 
-    private function buildReceiptHtml(Booking $booking, bool $guestsComplete = false, ?string $displayRef = null): string
+    private function buildReceiptHtml(Booking $booking, bool $guestsComplete = false, ?string $displayRef = null, bool $isAgentBooking = false, bool $isAgentCopy = false): string
     {
         $booking->loadMissing(['primaryGuest', 'timeSlot.boat', 'items', 'addons.addon', 'guests']);
         $guest = $booking->primaryGuest;
@@ -108,7 +174,10 @@ class EmailService
 
         $date = \Illuminate\Support\Carbon::parse($booking->tour_date)->format('l, F j, Y');
         if ($isPrivate) {
-            $timeDisplay = $booking->special_comment ?? 'TBD';
+            $ptr = \App\Models\PrivateTourRequest::where('booking_id', $booking->id)->first();
+            $timeDisplay = ($ptr && $ptr->confirmed_start_time)
+                ? \Illuminate\Support\Carbon::parse($ptr->confirmed_start_time)->format('g:i A') . ' - ' . \Illuminate\Support\Carbon::parse($ptr->confirmed_end_time)->format('g:i A')
+                : 'TBD';
             $boatName = 'Private Charter';
             $guestCount = $booking->guests->count() . ' passengers';
         } else {
@@ -143,11 +212,13 @@ class EmailService
         foreach ($booking->addons as $addonItem) {
             if ($addonItem->addon) {
                 $addonTitle = $addonItem->addon->title;
+                $addonPrice = '$' . number_format($addonItem->unit_price_cents / 100, 2);
+                $addonLineTotal = '$' . number_format(($addonItem->quantity * $addonItem->unit_price_cents) / 100, 2);
                 $itemsHtml .= "<tr>
                     <td style=\"padding:10px 12px; border-bottom:1px solid #e5e7eb; color:#6b7280;\">&nbsp;&nbsp;✨ {$addonTitle}</td>
                     <td style=\"padding:10px 12px; border-bottom:1px solid #e5e7eb; text-align:center; color:#6b7280;\">{$addonItem->quantity}</td>
-                    <td style=\"padding:10px 12px; border-bottom:1px solid #e5e7eb; text-align:right; color:#6b7280;\">Included</td>
-                    <td style=\"padding:10px 12px; border-bottom:1px solid #e5e7eb; text-align:right; color:#6b7280;\">—</td>
+                    <td style=\"padding:10px 12px; border-bottom:1px solid #e5e7eb; text-align:right; color:#6b7280;\">{$addonPrice}</td>
+                    <td style=\"padding:10px 12px; border-bottom:1px solid #e5e7eb; text-align:right; color:#6b7280;\">{$addonLineTotal}</td>
                 </tr>";
             }
         }
@@ -199,6 +270,35 @@ CTA;
                         </td>
                     </tr>
 CTA;
+        }
+
+        // Build conditional pricing rows
+        if ($isAgentBooking) {
+            $agentTotal = $isAgentCopy
+                ? '$' . number_format(($booking->total_price_cents - ($booking->commission_cents ?? 0)) / 100, 2)
+                : $subtotal;
+            $totalLabel = $isAgentCopy ? 'Total (less commission)' : 'Total';
+            $pricingRowsHtml = <<<PRICING
+                                    <tr>
+                                        <td colspan="3" style="padding:10px 12px; text-align:right; font-size:18px; font-weight:700; border-top:2px solid #0d9488; color:#0d9488;">{$totalLabel}</td>
+                                        <td style="padding:10px 12px; text-align:right; font-size:18px; font-weight:700; border-top:2px solid #0d9488; color:#0d9488;">{$agentTotal}</td>
+                                    </tr>
+PRICING;
+        } else {
+            $pricingRowsHtml = <<<PRICING
+                                    <tr>
+                                        <td colspan="3" style="padding:10px 12px; text-align:right; font-size:14px; color:#6b7280;">Subtotal</td>
+                                        <td style="padding:10px 12px; text-align:right; font-size:14px; color:#111827;">{$subtotal}</td>
+                                    </tr>
+                                    <tr>
+                                        <td colspan="3" style="padding:4px 12px 10px; text-align:right; font-size:14px; color:#6b7280;">Booking Fee</td>
+                                        <td style="padding:4px 12px 10px; text-align:right; font-size:14px; color:#111827;">{$fees}</td>
+                                    </tr>
+                                    <tr>
+                                        <td colspan="3" style="padding:10px 12px; text-align:right; font-size:18px; font-weight:700; border-top:2px solid #0d9488; color:#0d9488;">Grand Total</td>
+                                        <td style="padding:10px 12px; text-align:right; font-size:18px; font-weight:700; border-top:2px solid #0d9488; color:#0d9488;">{$grandTotal}</td>
+                                    </tr>
+PRICING;
         }
 
         return <<<HTML
@@ -283,18 +383,7 @@ CTA;
                                     {$itemsHtml}
                                 </tbody>
                                 <tfoot>
-                                    <tr>
-                                        <td colspan="3" style="padding:10px 12px; text-align:right; font-size:14px; color:#6b7280;">Subtotal</td>
-                                        <td style="padding:10px 12px; text-align:right; font-size:14px; color:#111827;">{$subtotal}</td>
-                                    </tr>
-                                    <tr>
-                                        <td colspan="3" style="padding:4px 12px 10px; text-align:right; font-size:14px; color:#6b7280;">Booking Fee</td>
-                                        <td style="padding:4px 12px 10px; text-align:right; font-size:14px; color:#111827;">{$fees}</td>
-                                    </tr>
-                                    <tr>
-                                        <td colspan="3" style="padding:10px 12px; text-align:right; font-size:18px; font-weight:700; border-top:2px solid #0d9488; color:#0d9488;">Grand Total</td>
-                                        <td style="padding:10px 12px; text-align:right; font-size:18px; font-weight:700; border-top:2px solid #0d9488; color:#0d9488;">{$grandTotal}</td>
-                                    </tr>
+                                    {$pricingRowsHtml}
                                 </tfoot>
                             </table>
                         </td>
@@ -417,9 +506,17 @@ HTML;
             return;
         }
 
-        $boat = $booking->timeSlot->boat;
+        $boat = $booking->timeSlot?->boat;
         $date = \Illuminate\Support\Carbon::parse($booking->tour_date)->format('l, F j, Y');
-        $time = \Illuminate\Support\Carbon::parse($booking->timeSlot->start_time)->format('g:i A') . ' - ' . \Illuminate\Support\Carbon::parse($booking->timeSlot->end_time)->format('g:i A');
+
+        if ($booking->source_type === 'private') {
+            $ptr = \App\Models\PrivateTourRequest::where('booking_id', $booking->id)->first();
+            $time = ($ptr && $ptr->confirmed_start_time)
+                ? \Illuminate\Support\Carbon::parse($ptr->confirmed_start_time)->format('g:i A') . ' - ' . \Illuminate\Support\Carbon::parse($ptr->confirmed_end_time)->format('g:i A')
+                : ($booking->special_comment ?? 'TBD');
+        } else {
+            $time = \Illuminate\Support\Carbon::parse($booking->timeSlot->start_time)->format('g:i A') . ' - ' . \Illuminate\Support\Carbon::parse($booking->timeSlot->end_time)->format('g:i A');
+        }
         $grandTotal = '$' . number_format(($booking->total_price_cents + ($booking->fees_cents ?? 0)) / 100, 2);
         $confirmationUrl = "https://bookings.clearboatbahamas.com/book/confirmation?ref={$booking->booking_ref}&email=" . urlencode($guest->email);
 
@@ -543,12 +640,18 @@ HTML;
 HTML;
 
         try {
-            $result = Resend::emails()->send([
+            $emailPayload = [
                 'from' => 'Clear Boat Bahamas <bookings@mail.clearboatbahamas.com>',
                 'to' => [$guest->email],
                 'subject' => "Guest Info Complete — Tickets Ready for {$booking->booking_ref}",
                 'html' => $html,
-            ]);
+            ];
+
+            if ($attachment = $this->generateTicketAttachment($booking)) {
+                $emailPayload['attachments'] = [$attachment];
+            }
+
+            $result = Resend::emails()->send($emailPayload);
 
             EmailLog::create([
                 'booking_id' => $booking->id,

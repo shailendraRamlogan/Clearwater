@@ -34,6 +34,7 @@ class BookingController extends Controller
             $existingBooked = Booking::where("time_slot_id", $validated["time_slot_id"])
                 ->where("tour_date", $validated["tour_date"])
                 ->whereNotIn("status", ["cancelled"])
+                ->where("source_type", "!=", "private")
                 ->get()
                 ->sum(fn($b) => $b->items->sum("quantity"));
 
@@ -267,4 +268,50 @@ class BookingController extends Controller
         return response()->json(["status" => $payment->fresh()->status]);
     }
 
+    /**
+     * Handle rebook fee payment success — send confirmation email with tickets.
+     * Called from Stripe Checkout success_url.
+     */
+    public function rebookFeeConfirm(Request $request)
+    {
+        $ref = $request->query('ref');
+        $email = $request->query('email');
+
+        $frontendUrl = 'https://bookings.clearboatbahamas.com/book/confirmation?ref=' . urlencode($ref) . '&email=' . urlencode($email ?? '');
+
+        if (!$ref) {
+            return redirect($frontendUrl);
+        }
+
+        $booking = \App\Models\Booking::where('booking_ref', $ref)->first();
+
+        if (!$booking) {
+            return redirect($frontendUrl);
+        }
+
+        // Only send confirmation if this is a rebook with a pending fee payment
+        $hasPendingFee = \App\Models\Payment::where('booking_id', $booking->id)
+            ->where('status', 'pending')
+            ->whereRaw("metadata->>'type' = 'rebook_fee'")
+            ->exists();
+
+        if ($hasPendingFee && $booking->status === 'confirmed') {
+            try {
+                $booking->loadMissing(['primaryGuest', 'guests', 'items', 'addons', 'timeSlot', 'timeSlot.boat', 'bookingAgent']);
+                app(\App\Services\EmailService::class)->sendConfirmation($booking);
+
+                // Mark the fee payment as completed
+                \App\Models\Payment::where('booking_id', $booking->id)
+                    ->where('status', 'pending')
+                    ->whereRaw("metadata->>'type' = 'rebook_fee'")
+                    ->update(['status' => 'completed']);
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::warning('Rebook fee confirmation email failed for ' . $ref . ': ' . $e->getMessage());
+            }
+        }
+
+        return redirect($frontendUrl);
+    }
+
 }
+

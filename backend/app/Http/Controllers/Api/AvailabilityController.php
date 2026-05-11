@@ -25,6 +25,7 @@ class AvailabilityController extends Controller
                 $used = Booking::where('time_slot_id', $slot->id)
                     ->where('tour_date', $date)
                     ->where('status', '!=', 'cancelled')
+                    ->where('source_type', '!=', 'private')
                     ->with('items')
                     ->get()
                     ->sum(fn($b) => $b->items->sum('quantity') + $b->photo_upgrade_count);

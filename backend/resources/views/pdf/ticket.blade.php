@@ -1,11 +1,27 @@
 @php
-    $startTime = \Carbon\Carbon::parse($booking->timeSlot->start_time)->format('g:i A');
-    $endTime = \Carbon\Carbon::parse($booking->timeSlot->end_time)->format('g:i A');
+    $isPrivate = $booking->source_type === 'private';
+    if ($isPrivate) {
+        $ptr = \App\Models\PrivateTourRequest::where('booking_id', $booking->id)->first();
+        $startTime = ($ptr && $ptr->confirmed_start_time)
+            ? \Carbon\Carbon::parse($ptr->confirmed_start_time)->format('g:i A')
+            : ($booking->special_comment ?? 'TBD');
+        $endTime = ($ptr && $ptr->confirmed_end_time)
+            ? \Carbon\Carbon::parse($ptr->confirmed_end_time)->format('g:i A')
+            : '';
+    } else {
+        $startTime = $booking->timeSlot
+            ? \Carbon\Carbon::parse($booking->timeSlot->start_time)->format('g:i A')
+            : 'N/A';
+        $endTime = $booking->timeSlot
+            ? \Carbon\Carbon::parse($booking->timeSlot->end_time)->format('g:i A')
+            : '';
+    }
     $formattedDate = $booking->tour_date->format('F j, Y');
-    $boatName = $booking->timeSlot?->boat?->name ?? 'N/A';
+    $boatName = $booking->timeSlot?->boat?->name ?? 'Private Tour';
     $totalTickets = count($tickets);
     $pages = array_chunk($tickets, 3);
 @endphp
+
 
 <!DOCTYPE html>
 <html>

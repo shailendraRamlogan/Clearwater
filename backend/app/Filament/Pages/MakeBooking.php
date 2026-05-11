@@ -15,6 +15,7 @@ use App\Services\FeeService;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\TimePicker;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Section;
@@ -432,7 +433,7 @@ class MakeBooking extends Page
                                 ->numeric()
                                 ->minValue(0)
                                 ->live()
-                                ->suffixIcon('heroicon-o-baby'),
+                                ->suffixIcon('heroicon-o-sparkles'),
 
 
 
@@ -453,13 +454,18 @@ class MakeBooking extends Page
                                 ->label('Tour Date')
                                 ->required()
                                 ->minDate(now()),
-                            TextInput::make('confirmed_start_time')
+                            TimePicker::make('confirmed_start_time')
                                 ->label('Start Time')
                                 ->required()
-                                ->placeholder('e.g. 10:00 AM'),
-                            TextInput::make('confirmed_end_time')
+                                ->seconds(false)
+                                ->minutesStep(15)
+                                ->dehydrateStateUsing(fn ($state) => $state ? \Carbon\Carbon::parse($state)->format('H:i') : null),
+                            TimePicker::make('confirmed_end_time')
                                 ->label('End Time')
-                                ->placeholder('e.g. 1:00 PM'),
+                                ->required()
+                                ->seconds(false)
+                                ->minutesStep(15)
+                                ->dehydrateStateUsing(fn ($state) => $state ? \Carbon\Carbon::parse($state)->format('H:i') : null),
                             TextInput::make('total_price_dollars')
                                 ->label('Total Price ($)')
                                 ->required()
@@ -639,14 +645,10 @@ class MakeBooking extends Page
                 }
 
                 $totalGuests = $data['adult_count'] + $data['child_count'];
-                $existingBooked = Booking::where('time_slot_id', $data['time_slot_id'])
-                    ->where('tour_date', $data['tour_date'])
-                    ->whereNotIn('status', ['cancelled'])
-                    ->get()
-                    ->sum(fn ($b) => $b->items->sum('quantity'));
+                $remaining = $timeSlot->remainingCapacity($data['tour_date']);
 
-                if ($existingBooked + $totalGuests > $timeSlot->max_capacity) {
-                    throw new \Exception('This time slot is full. ' . $timeSlot->remainingCapacity($data['tour_date']) . ' spots remaining.');
+                if ($remaining < $totalGuests) {
+                    throw new \Exception('This time slot is full. ' . $remaining . ' spots remaining.');
                 }
 
                 $adultPrice = 20000;
@@ -697,13 +699,6 @@ class MakeBooking extends Page
                     'commission_percent' => $commissionPct,
                     'sales_rep_name' => $data['sales_rep_name'] ?? null,
                 ]);
-
-                // Fall back to agent info if no guest data provided
-                $agent = isset($data['booking_agent']) ? \App\Models\BookingAgent::find($data['booking_agent']) : null;
-                $guestFirst = $data['guest_first_name'] ?: ($agent ? $agent->name : 'Walk-in');
-                $guestLast = $data['guest_last_name'] ?? '';
-                $guestEmail = $data['guest_email'] ?: ($agent ? $agent->email : '');
-                $guestPhone = $data['guest_phone'] ?: ($agent ? ($agent->phone ?? '') : '');
 
                 BookingGuest::create([
                     'booking_id' => $booking->id,
@@ -776,11 +771,18 @@ class MakeBooking extends Page
                 $feeService = app(FeeService::class);
                 $feeResult = $feeService->calculateFees($totalPriceCents);
 
+                // Fall back to agent info when guest details aren't provided
+                $agent = !empty($data['booking_agent']) ? \App\Models\BookingAgent::find($data['booking_agent']) : null;
+                $guestFirst = $data['guest_first_name'] ?: ($agent ? $agent->name : 'Walk-in');
+                $guestLast = $data['guest_last_name'] ?? '';
+                $guestEmail = $data['guest_email'] ?: ($agent ? $agent->email : '');
+                $guestPhone = $data['guest_phone'] ?? ($agent ? ($agent->phone ?? '') : '');
+
                 $ptr = PrivateTourRequest::create([
-                    'contact_first_name' => $data['guest_first_name'],
-                    'contact_last_name' => $data['guest_last_name'],
-                    'contact_email' => $data['guest_email'],
-                    'contact_phone' => $data['guest_phone'] ?? '',
+                    'contact_first_name' => $guestFirst,
+                    'contact_last_name' => $guestLast,
+                    'contact_email' => $guestEmail,
+                    'contact_phone' => $guestPhone,
                     'adult_count' => $data['adult_count'],
                     'child_count' => $data['child_count'],
                     'infant_count' => $data['infant_count'] ?? 0,
@@ -796,10 +798,10 @@ class MakeBooking extends Page
                 ]);
 
                 $ptr->guests()->create([
-                    'first_name' => $data['guest_first_name'],
-                    'last_name' => $data['guest_last_name'],
-                    'email' => $data['guest_email'],
-                    'phone' => $data['guest_phone'] ?? '',
+                    'first_name' => $guestFirst,
+                    'last_name' => $guestLast,
+                    'email' => $guestEmail,
+                    'phone' => $guestPhone,
                     'is_primary' => true,
                 ]);
 
@@ -815,7 +817,6 @@ class MakeBooking extends Page
                     }
                 }
 
-                $timeSlotId = TimeSlot::first()?->id;
                 $totalGuests = $data['adult_count'] + $data['child_count'];
                 $timeDisplay = $data['confirmed_start_time'];
                 if (!empty($data['confirmed_end_time'])) {
@@ -841,23 +842,18 @@ class MakeBooking extends Page
 
                 $booking = Booking::create([
                     'tour_date' => $data['confirmed_tour_date'],
+                    'time_slot_id' => null,
                     'status' => 'confirmed',
                     'total_price_cents' => $totalPriceCents,
                     'fees_cents' => $feeResult['total_fees_cents'],
                     'special_comment' => "Private Tour ({$ptr->booking_ref}) — {$timeDisplay}",
-                    'source_type' => 'agent',
+                    'source_type' => 'private',
+                    'booking_ref' => $ptr->booking_ref,
                     'booking_agent_id' => $data['booking_agent'] ?? null,
                     'commission_cents' => $commissionCents,
                     'commission_percent' => $commissionPct,
                     'sales_rep_name' => $data['sales_rep_name'] ?? null,
                 ]);
-
-                // Fall back to agent info if no guest data provided
-                $agent = isset($data['booking_agent']) ? \App\Models\BookingAgent::find($data['booking_agent']) : null;
-                $guestFirst = $data['guest_first_name'] ?: ($agent ? $agent->name : 'Walk-in');
-                $guestLast = $data['guest_last_name'] ?? '';
-                $guestEmail = $data['guest_email'] ?: ($agent ? $agent->email : '');
-                $guestPhone = $data['guest_phone'] ?: ($agent ? ($agent->phone ?? '') : '');
 
                 BookingGuest::create([
                     'booking_id' => $booking->id,

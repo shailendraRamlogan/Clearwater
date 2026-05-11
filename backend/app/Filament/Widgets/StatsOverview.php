@@ -24,6 +24,7 @@ class StatsOverview extends BaseWidget
         $totalGuests = BookingGuest::count();
         $totalBookings = Booking::where('status', 'confirmed')
             ->where('tour_date', '>=', $today)
+            ->where('source_type', '!=', 'private')
             ->count();
         $totalCapacity = TimeSlot::sum('max_capacity');
         $occupancyRate = $totalCapacity > 0 ? round(($totalBookings / $totalCapacity) * 100, 1) : 0;

@@ -287,16 +287,17 @@ class PrivateTourController extends Controller
 
         // Convert to regular booking
         $booking = DB::transaction(function () use ($privateTourRequest, $validated) {
-            // Create the regular booking (use first time slot as placeholder for private tours)
-            $timeSlotId = \App\Models\TimeSlot::first()?->id;
+            // Create a booking record for the private tour (not tied to any scheduled time slot)
+            // Private tours are not linked to scheduled time slots
             $booking = Booking::create([
+                'booking_ref' => $privateTourRequest->booking_ref,
                 'tour_date' => $privateTourRequest->confirmed_tour_date,
-                'time_slot_id' => $timeSlotId,
+                'time_slot_id' => null,
                 'status' => 'confirmed',
                 'source_type' => 'private',
                 'photo_upgrade_count' => 0,
                 'special_occasion' => $privateTourRequest->has_occasion ? 'other' : null,
-                'special_comment' => 'Private Tour ({$privateTourRequest->booking_ref}) — ' . $privateTourRequest->formatted_time,
+                'special_comment' => 'Private Tour (' . $privateTourRequest->booking_ref . ') — ' . $privateTourRequest->formatted_time,
                 'total_price_cents' => $privateTourRequest->total_price_cents,
                 'fees_cents' => $privateTourRequest->fees_cents,
             ]);

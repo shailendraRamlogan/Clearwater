@@ -226,7 +226,7 @@ class AgentBookingResource extends Resource
                         ->deselectRecordsAfterCompletion(),
                 ]),
             ])
-            ->defaultSort('tour_date', 'desc');
+            ->defaultSort('created_at', 'desc');
     }
 
     public static function getRelations(): array

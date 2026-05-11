@@ -8,6 +8,7 @@ use App\Models\BookingItem;
 use App\Models\BookingAddon;
 use App\Models\Payment;
 use App\Models\TimeSlot;
+use App\Models\PrivateTourRequest;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -26,9 +27,17 @@ class RebookService
      * @return array{booking: Booking, payment_link: ?string, warnings: string[]}
      * @throws \Exception
      */
-    public function rebook(Booking $original, Carbon $newDate, int $feeCents, User $admin): array
-    {
+    public function rebook(
+        Booking $original,
+        Carbon $newDate,
+        int $feeCents,
+        User $admin,
+        ?string $timeSlotId = null,
+        ?string $newStartTime = null,
+        ?string $newEndTime = null,
+    ): array {
         $warnings = [];
+        $isPrivate = empty($original->time_slot_id);
 
         // Pre-transaction validations
         if (!in_array($original->status, ['confirmed', 'pending'])) {
@@ -54,21 +63,24 @@ class RebookService
             throw new \InvalidArgumentException('Cannot apply a rebooking fee — no customer email on file. Either set the fee to $0 or add a customer email first.');
         }
 
-        // Capacity check (skip for private tours without time slots)
-        if ($original->time_slot_id) {
-            $timeSlot = TimeSlot::where('id', $original->time_slot_id)->first();
+        // Capacity & day-of-week validation (skip for private tours without time slots)
+        if ($timeSlotId) {
+            $timeSlot = TimeSlot::where('id', $timeSlotId)->first();
             if ($timeSlot) {
-                $ticketCount = $original->items->sum('quantity');
-                $existingGuests = Booking::where('time_slot_id', $original->time_slot_id)
-                    ->where('tour_date', $newDate)
-                    ->whereNotIn('status', ['cancelled'])
-                    ->get()
-                    ->sum(fn ($b) => $b->items->sum('quantity'));
+                $expectedDay = strtolower($newDate->format('l'));
+                if ($timeSlot->day !== $expectedDay) {
+                    throw new \InvalidArgumentException(
+                        "The selected time slot ({$timeSlot->day}) is not available on {$newDate->format('l, M j, Y')}."
+                    );
+                }
 
-                if ($existingGuests + $ticketCount > $timeSlot->max_capacity) {
+                $ticketCount = $original->total_guests;
+                $remaining = $timeSlot->remainingCapacity($newDate->toDateString());
+
+                if ($remaining < $ticketCount) {
                     throw new \InvalidArgumentException(
                         "The selected time slot does not have enough capacity on {$newDate->format('M j, Y')}. " .
-                        "Currently {$existingGuests} booked, need {$ticketCount} more, max is {$timeSlot->max_capacity}."
+                        "Only {$remaining} spots remaining, need {$ticketCount}."
                     );
                 }
             }
@@ -77,8 +89,11 @@ class RebookService
         // Load relationships for cloning
         $original->loadMissing(['guests', 'items', 'addons']);
 
+        // Find existing PrivateTourRequest if this is a private tour
+        $ptr = $isPrivate ? PrivateTourRequest::where('booking_id', $original->id)->first() : null;
+
         // ── Transaction ──
-        $newBooking = DB::transaction(function () use ($original, $newDate, $feeCents, $admin) {
+        $newBooking = DB::transaction(function () use ($original, $newDate, $feeCents, $admin, $timeSlotId, $newStartTime, $newEndTime, $ptr) {
             // Lock original
             $original = Booking::lockForUpdate()->find($original->id);
 
@@ -93,7 +108,7 @@ class RebookService
             // Clone booking
             $newBooking = Booking::create([
                 'tour_date' => $newDate,
-                'time_slot_id' => $original->time_slot_id,
+                'time_slot_id' => $timeSlotId ?? $original->time_slot_id,
                 'status' => Booking::STATUS_CONFIRMED,
                 'source_type' => $original->source_type ?? 'regular',
                 'photo_upgrade_count' => $original->photo_upgrade_count,
@@ -143,6 +158,27 @@ class RebookService
                     'addon_id' => $addon->addon_id,
                     'quantity' => $addon->quantity,
                     'unit_price_cents' => $addon->unit_price_cents,
+                ]);
+            }
+
+            // For private tours: clone the PrivateTourRequest with updated times
+            if ($ptr) {
+                $newPtr = $ptr->replicate([
+                    'booking_ref',
+                    'id',
+                ]);
+                $newPtr->booking_ref = PrivateTourRequest::generateRef();
+                $newPtr->booking_id = $newBooking->id;
+                $newPtr->confirmed_tour_date = $newDate->toDateString();
+                $newPtr->confirmed_start_time = $newStartTime ?? $ptr->confirmed_start_time;
+                $newPtr->confirmed_end_time = $newEndTime ?? $ptr->confirmed_end_time;
+                $newPtr->status = 'confirmed';
+                $newPtr->save();
+
+                // Update the booking's special_comment and booking_ref to match PTR
+                $newBooking->update([
+                    'booking_ref' => $newPtr->booking_ref,
+                    'special_comment' => 'Private Tour (' . $newPtr->booking_ref . ')',
                 ]);
             }
 

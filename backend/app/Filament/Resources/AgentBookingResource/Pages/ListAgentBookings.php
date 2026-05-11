@@ -18,4 +18,14 @@ class ListAgentBookings extends ListRecords
     {
         return [];
     }
+
+    protected function getDefaultTableSortColumn(): ?string
+    {
+        return 'created_at';
+    }
+
+    protected function getDefaultTableSortDirection(): ?string
+    {
+        return 'desc';
+    }
 }

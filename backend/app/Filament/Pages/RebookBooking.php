@@ -23,13 +23,18 @@ class RebookBooking extends Page
     public ?Booking $foundBooking = null;
     public ?string $newDate = null;
     public ?float $feeDollars = 0;
+    public ?string $newTimeSlotId = null;
+    public ?string $newStartTime = null;
+    public ?string $newEndTime = null;
+    public array $availableSlots = [];
     public ?string $step = 'search';
     public ?string $error = null;
+    public bool $showConfirmModal = false;
 
     public static function canAccess(): bool
     {
         $user = Auth::user();
-        return $user && ($user->isAdminOrSuper());
+        return $user && in_array($user->role, ['admin', 'super_admin', 'agent']);
     }
 
     public function mount(): void
@@ -77,9 +82,61 @@ class RebookBooking extends Page
                     $this->step = 'confirm';
                     $this->error = null;
                     $this->newDate = null;
+                    $this->newTimeSlotId = null;
+                    $this->newStartTime = null;
+                    $this->newEndTime = null;
                     $this->feeDollars = 0;
                 }),
         ];
+    }
+
+    public function updatedNewDate(): void
+    {
+        $this->newTimeSlotId = null;
+        $this->newStartTime = null;
+        $this->newEndTime = null;
+        $this->availableSlots = [];
+
+        if (empty($this->newDate)) {
+            return;
+        }
+
+        // Only load regular time slots for non-private bookings
+        if ($this->foundBooking?->time_slot_id) {
+            $date = Carbon::parse($this->newDate);
+            $dayName = strtolower($date->format('l'));
+
+            $slots = \App\Models\TimeSlot::with('boat')
+                ->where('day', $dayName)
+                ->where('is_blocked', false)
+                ->get();
+
+            if ($slots->isEmpty()) {
+                return;
+            }
+
+            $ticketCount = $this->foundBooking?->total_guests ?? 0;
+
+            foreach ($slots as $slot) {
+                $remaining = $slot->remainingCapacity($date->toDateString());
+                $existingGuests = $slot->max_capacity - $remaining;
+
+                $this->availableSlots[] = [
+                    'id' => $slot->id,
+                    'time' => \Carbon\Carbon::parse($slot->start_time)->format('g:i A') . ' – ' . \Carbon\Carbon::parse($slot->end_time)->format('g:i A'),
+                    'boat' => $slot->boat?->name ?? 'N/A',
+                    'remaining' => $remaining,
+                    'full' => $remaining < $ticketCount,
+                    'capacity' => $slot->max_capacity,
+                    'booked' => $existingGuests,
+                ];
+            }
+        }
+    }
+
+    public function openConfirmModal(): void
+    {
+        $this->showConfirmModal = true;
     }
 
     public function submitRebook(): void
@@ -91,6 +148,23 @@ class RebookBooking extends Page
 
         if (empty($this->newDate)) {
             Notification::make()->title('Please select a new date.')->danger()->send();
+            return;
+        }
+
+        // Regular bookings: require a time slot
+        if ($this->foundBooking->time_slot_id && empty($this->newTimeSlotId)) {
+            Notification::make()->title('Please select a time slot.')->danger()->send();
+            return;
+        }
+
+        // Private tours: require start and end times
+        if (!$this->foundBooking->time_slot_id && (empty($this->newStartTime) || empty($this->newEndTime))) {
+            Notification::make()->title('Please select a start and end time for the private tour.')->danger()->send();
+            return;
+        }
+
+        if (!$this->foundBooking->time_slot_id && $this->newStartTime >= $this->newEndTime) {
+            Notification::make()->title('End time must be after start time.')->danger()->send();
             return;
         }
 
@@ -112,7 +186,15 @@ class RebookBooking extends Page
 
         try {
             $service = app(RebookService::class);
-            $result = $service->rebook($this->foundBooking, $newDate, $feeCents, Auth::user());
+            $result = $service->rebook(
+                $this->foundBooking,
+                $newDate,
+                $feeCents,
+                Auth::user(),
+                $this->newTimeSlotId ?: null,
+                $this->newStartTime ?: null,
+                $this->newEndTime ?: null,
+            );
 
             $msg = "Booking rebooked! New reference: {$result['booking']->booking_ref}";
             if ($result['payment_link']) {
@@ -125,11 +207,16 @@ class RebookBooking extends Page
             Notification::make()->title($msg)->success()->send();
 
             // Reset
+            $this->showConfirmModal = false;
             $this->foundBooking = null;
             $this->step = 'search';
             $this->searchRef = null;
             $this->newDate = null;
+            $this->newTimeSlotId = null;
+            $this->newStartTime = null;
+            $this->newEndTime = null;
             $this->feeDollars = 0;
+            $this->availableSlots = [];
             $this->form->fill();
         } catch (\Exception $e) {
             Notification::make()
@@ -142,11 +229,16 @@ class RebookBooking extends Page
 
     public function goBack(): void
     {
+        $this->showConfirmModal = false;
         $this->foundBooking = null;
         $this->step = 'search';
         $this->searchRef = null;
         $this->newDate = null;
+        $this->newTimeSlotId = null;
+        $this->newStartTime = null;
+        $this->newEndTime = null;
         $this->feeDollars = 0;
+        $this->availableSlots = [];
         $this->error = null;
         $this->form->fill();
     }

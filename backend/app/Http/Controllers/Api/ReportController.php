@@ -18,12 +18,19 @@ class ReportController extends Controller
             ->orderBy('created_at')
             ->get();
 
+        $regularBookings = $bookings->where('source_type', '!=', 'private');
+        $privateBookings = $bookings->where('source_type', 'private');
+
         $report = [
             'date' => $date,
             'total_bookings' => $bookings->count(),
+            'regular_bookings' => $regularBookings->count(),
+            'private_bookings' => $privateBookings->count(),
             'total_adults' => $bookings->sum(fn($b) => $b->items->where('ticket_type', 'adult')->sum('quantity')),
             'total_children' => $bookings->sum(fn($b) => $b->items->where('ticket_type', 'child')->sum('quantity')),
             'total_revenue' => $bookings->sum(fn($b) => $b->total_price_cents) / 100,
+            'regular_revenue' => $regularBookings->sum(fn($b) => $b->total_price_cents) / 100,
+            'private_revenue' => $privateBookings->sum(fn($b) => $b->total_price_cents) / 100,
             'bookings' => $bookings,
         ];
 

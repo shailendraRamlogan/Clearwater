@@ -30,9 +30,23 @@ class TicketService
     {
         $booking->loadMissing(['guests', 'items', 'timeSlot.boat']);
 
-        $boatName = $booking->timeSlot?->boat?->name ?? 'N/A';
+        // For private tours, load the linked PTR for custom time/boat info
+        $ptr = null;
+        if ($booking->source_type === 'private') {
+            $ptr = \App\Models\PrivateTourRequest::where('booking_id', $booking->id)->first();
+        }
+
+        $boatName = $booking->timeSlot?->boat?->name ?? 'Private Tour';
         $formattedDate = $booking->tour_date->format('F j, Y');
-        $startTime = \Carbon\Carbon::parse($booking->timeSlot->start_time)->format('g:i A');
+
+        // Use PTR times for private tours, time slot times for regular bookings
+        if ($ptr && $ptr->confirmed_start_time) {
+            $startTime = \Carbon\Carbon::parse($ptr->confirmed_start_time)->format('g:i A');
+        } else {
+            $startTime = $booking->timeSlot
+                ? \Carbon\Carbon::parse($booking->timeSlot->start_time)->format('g:i A')
+                : 'N/A';
+        }
 
         $primaryGuest = $booking->guests->firstWhere('is_primary', true) ?? $booking->guests->first();
 

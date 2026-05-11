@@ -17,6 +17,9 @@ interface BookingData {
   grand_total?: number;
   subtotal?: number;
   fees_cents?: number;
+  is_agent_booking?: boolean;
+  customer_total_cents?: number;
+  rebook_fee_cents?: number;
 }
 
 export default function ConfirmationContent() {
@@ -79,11 +82,17 @@ export default function ConfirmationContent() {
       ].filter(Boolean).join(", ")
     : null;
 
+  // For agent bookings: show flat total (tickets + addons only, no processing fee)
+  // For regular bookings: show grand total (includes processing fee)
   const displayTotalCents = total
     ? Number(total)
+    : booking?.is_agent_booking
+    ? (booking.customer_total_cents ?? 0)
     : booking?.grand_total
     ? Math.round(booking.grand_total * 100)
     : null;
+
+  const hasRebookFee = booking && (booking.rebook_fee_cents ?? 0) > 0;
 
   const handleDownloadTicket = () => {
     if (!ref) return;
@@ -161,6 +170,15 @@ export default function ConfirmationContent() {
                     <div>
                       <p className="text-xs text-brand-500">Total Paid</p>
                       <p className="text-sm font-semibold text-brand-900">BSD ${(displayTotalCents / 100).toFixed(2)}</p>
+                    </div>
+                  </div>
+                )}
+                {hasRebookFee && (
+                  <div className="flex items-center gap-3">
+                    <div className="w-5 h-5 flex-shrink-0 text-center text-amber-500 text-sm font-bold">+</div>
+                    <div>
+                      <p className="text-xs text-amber-600">Rescheduling Fee</p>
+                      <p className="text-sm font-semibold text-amber-700">BSD ${((booking!.rebook_fee_cents!) / 100).toFixed(2)} (paid separately)</p>
                     </div>
                   </div>
                 )}

@@ -39,6 +39,7 @@ class AgentBookingService
             $existingBooked = Booking::where('time_slot_id', $data['time_slot_id'])
                 ->where('tour_date', $data['tour_date'])
                 ->whereNotIn('status', ['cancelled'])
+                ->where('source_type', '!=', 'private')
                 ->get()
                 ->sum(fn ($b) => $b->items->sum('quantity'));
 

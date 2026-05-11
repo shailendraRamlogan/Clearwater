@@ -42,7 +42,10 @@ class TimeSlot extends Model
         $used = Booking::where('time_slot_id', $this->id)
             ->where('tour_date', $date)
             ->where('status', '!=', 'cancelled')
-            ->sum('total_guests');
+            ->where('source_type', '!=', 'private')
+            ->with('items')
+            ->get()
+            ->sum(fn ($b) => $b->items->sum('quantity'));
 
         return max(0, $this->max_capacity - $used);
     }
