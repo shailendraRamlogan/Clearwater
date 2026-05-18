@@ -7,10 +7,12 @@ use App\Http\Resources\RefundResource;
 use App\Models\Booking;
 use App\Models\Payment;
 use App\Models\Refund;
+use App\Services\RefundService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class RefundApiController extends Controller
 {
@@ -18,11 +20,11 @@ class RefundApiController extends Controller
      * List refunds with optional filters.
      *
      * GET /api/partner/refunds
-     * Query params: status, booking_id, date_from, date_to, per_page, page
+     * Query params: status, booking_id, type, date_from, date_to, per_page, page
      */
     public function index(Request $request): AnonymousResourceCollection
     {
-        $query = Refund::with(['booking', 'payment']);
+        $query = Refund::with(['booking', 'payment', 'initiator', 'approver']);
 
         if ($request->filled('status')) {
             $query->where('status', $request->input('status'));
@@ -30,6 +32,10 @@ class RefundApiController extends Controller
 
         if ($request->filled('booking_id')) {
             $query->where('booking_id', $request->input('booking_id'));
+        }
+
+        if ($request->filled('type')) {
+            $query->where('type', $request->input('type'));
         }
 
         if ($request->filled('date_from')) {
@@ -54,7 +60,7 @@ class RefundApiController extends Controller
      */
     public function show(string $id): RefundResource|JsonResponse
     {
-        $refund = Refund::with(['booking', 'payment'])->find($id);
+        $refund = Refund::with(['booking', 'payment', 'initiator', 'approver'])->find($id);
 
         if (!$refund) {
             return response()->json(['message' => 'Refund not found.'], 404);
@@ -64,104 +70,75 @@ class RefundApiController extends Controller
     }
 
     /**
-     * Create a refund for a booking.
+     * Create a refund request for a booking's payment.
      *
      * POST /api/partner/refunds
-     * Body: booking_id (required), amount_cents (required), reason, notes
+     * Body: payment_id (required), amount_cents (required), reason (required), type (optional, default: partial)
+     *
+     * Uses the existing RefundService for validation and Stripe processing.
      */
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'booking_id' => 'required|uuid',
+            'payment_id' => 'required|uuid',
             'amount_cents' => 'required|integer|min:1',
-            'reason' => 'sometimes|string|nullable|in:customer_request,duplicate,fraudulent,other',
-            'notes' => 'sometimes|string|nullable',
+            'reason' => 'required|string',
+            'type' => 'sometimes|string|in:full,partial',
         ]);
 
-        $booking = Booking::find($validated['booking_id']);
-        if (!$booking) {
-            return response()->json(['message' => 'Booking not found.'], 404);
-        }
-
-        // Find a successful payment for this booking
-        $payment = $booking->payments()->where('status', 'succeeded')->first();
+        $payment = Payment::find($validated['payment_id']);
         if (!$payment) {
-            return response()->json([
-                'message' => 'No successful payment found for this booking.',
-            ], 422);
+            return response()->json(['message' => 'Payment not found.'], 404);
         }
 
-        // Validate refund amount doesn't exceed payment
-        $alreadyRefunded = Refund::where('payment_id', $payment->id)
-            ->where('status', '!=', 'failed')
-            ->sum('amount_cents');
-
-        if ($validated['amount_cents'] > ($payment->amount_cents - $alreadyRefunded)) {
-            return response()->json([
-                'message' => 'Refund amount exceeds available amount.',
-                'payment_amount_cents' => $payment->amount_cents,
-                'already_refunded_cents' => $alreadyRefunded,
-                'available_cents' => $payment->amount_cents - $alreadyRefunded,
-            ], 422);
+        $booking = $payment->booking;
+        if (!$booking) {
+            return response()->json(['message' => 'No booking associated with this payment.'], 404);
         }
 
-        return DB::transaction(function () use ($validated, $booking, $payment, $request) {
-            $refund = Refund::create([
-                'booking_id' => $booking->id,
-                'payment_id' => $payment->id,
-                'amount_cents' => $validated['amount_cents'],
-                'reason' => $validated['reason'] ?? 'other',
-                'notes' => $validated['notes'] ?? null,
-                'status' => 'pending',
-                'initiated_by' => $request->attributes->get('partner_user_id', 'partner-api'),
-            ]);
+        // Use a system user for partner-initiated refunds
+        // The partner_user_id is set by PartnerTokenAuth middleware
+        $partnerUserId = $request->attributes->get('partner_user_id', 'partner-api');
 
-            // Process Stripe refund if Stripe is configured
-            $stripeKey = config('services.stripe.secret');
-            if ($stripeKey && $payment->stripe_intent_id) {
-                try {
-                    \Stripe\Stripe::setApiKey($stripeKey);
+        try {
+            $refundService = app(RefundService::class);
 
-                    // Retrieve the PaymentIntent to get the charge ID
-                    $intent = \Stripe\PaymentIntent::retrieve($payment->stripe_intent_id);
-                    $chargeId = $intent->latest_charge;
-
-                    if ($chargeId) {
-                        $stripeRefund = \Stripe\Refund::create([
-                            'charge' => $chargeId,
-                            'amount' => $validated['amount_cents'],
-                            'reason' => $validated['reason'] ?? 'requested_by_customer',
-                            'metadata' => [
-                                'booking_ref' => $booking->booking_ref,
-                                'refund_id' => $refund->id,
-                            ],
-                        ]);
-
-                        $refund->update([
-                            'stripe_refund_id' => $stripeRefund->id,
-                            'status' => 'processed',
-                        ]);
-
-                        // If full refund, cancel the booking
-                        if ($validated['amount_cents'] >= $payment->amount_cents) {
-                            $booking->update(['status' => Booking::STATUS_CANCELLED]);
-                        }
-                    }
-                } catch (\Exception $e) {
-                    \Log::warning('Stripe refund error: ' . $e->getMessage());
-                    // Leave as pending — can be retried manually
-                }
+            // For agent bookings without a payment, use createAgentRefund
+            if ($booking->source_type === 'agent') {
+                $refund = $refundService->createAgentRefund(
+                    $booking,
+                    $validated['amount_cents'],
+                    $validated['reason'],
+                    $this->getSystemUser(),
+                    $validated['type'] ?? 'partial'
+                );
+            } else {
+                $refund = $refundService->createRefundRequest(
+                    $validated['payment_id'],
+                    $validated['amount_cents'],
+                    $validated['reason'],
+                    $this->getSystemUser(),
+                    $validated['type'] ?? 'partial'
+                );
             }
 
             return response()->json([
-                'message' => 'Refund created.',
-                'refund' => new RefundResource($refund->fresh()->load(['booking', 'payment'])),
+                'message' => 'Refund request created.',
+                'refund' => new RefundResource($refund->load(['booking', 'payment', 'initiator', 'approver'])),
             ], 201);
-        });
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        } catch (\Exception $e) {
+            Log::error('Partner refund creation failed', [
+                'error' => $e->getMessage(),
+                'payment_id' => $validated['payment_id'] ?? null,
+            ]);
+            return response()->json(['message' => 'Failed to create refund.'], 500);
+        }
     }
 
     /**
-     * Update refund notes.
+     * Update refund notes/reason.
      *
      * PATCH /api/partner/refunds/{id}
      */
@@ -173,20 +150,27 @@ class RefundApiController extends Controller
             return response()->json(['message' => 'Refund not found.'], 404);
         }
 
+        if ($refund->isTerminal()) {
+            return response()->json([
+                'message' => 'Cannot update a terminal refund.',
+                'status' => $refund->status,
+            ], 422);
+        }
+
         $validated = $request->validate([
-            'notes' => 'sometimes|string|nullable',
+            'reason' => 'sometimes|string|nullable',
         ]);
 
         $refund->update($validated);
 
         return response()->json([
             'message' => 'Refund updated.',
-            'refund' => new RefundResource($refund->fresh()->load(['booking', 'payment'])),
+            'refund' => new RefundResource($refund->fresh()->load(['booking', 'payment', 'initiator', 'approver'])),
         ]);
     }
 
     /**
-     * Retry a failed/pending refund via Stripe.
+     * Retry/process a failed or pending refund.
      *
      * POST /api/partner/refunds/{id}/retry
      */
@@ -198,53 +182,47 @@ class RefundApiController extends Controller
             return response()->json(['message' => 'Refund not found.'], 404);
         }
 
-        if ($refund->status === 'processed') {
-            return response()->json(['message' => 'Refund already processed.'], 422);
-        }
-
-        $payment = $refund->payment;
-        $stripeKey = config('services.stripe.secret');
-
-        if (!$stripeKey || !$payment->stripe_intent_id) {
-            return response()->json(['message' => 'Stripe not configured or no payment intent.'], 422);
+        if ($refund->status === Refund::STATUS_COMPLETED) {
+            return response()->json(['message' => 'Refund already completed.'], 422);
         }
 
         try {
-            \Stripe\Stripe::setApiKey($stripeKey);
-            $intent = \Stripe\PaymentIntent::retrieve($payment->stripe_intent_id);
-            $chargeId = $intent->latest_charge;
+            $refundService = app(RefundService::class);
 
-            if ($chargeId) {
-                $stripeRefund = \Stripe\Refund::create([
-                    'charge' => $chargeId,
-                    'amount' => $refund->amount_cents,
-                    'metadata' => [
-                        'booking_ref' => $refund->booking->booking_ref,
-                        'refund_id' => $refund->id,
-                        'retry' => true,
-                    ],
-                ]);
-
-                $refund->update([
-                    'stripe_refund_id' => $stripeRefund->id,
-                    'status' => 'processed',
-                ]);
+            // If approved, process it
+            if ($refund->status === Refund::STATUS_APPROVED) {
+                $refund = $refundService->processRefund($refund, $this->getSystemUser());
             }
-        } catch (\Exception $e) {
+            // If pending, approve first then process
+            elseif ($refund->status === Refund::STATUS_PENDING) {
+                $refund = $refundService->approveRefund($refund, $this->getSystemUser());
+                $refund = $refundService->processRefund($refund, $this->getSystemUser());
+            }
+            // Processing or other states
+            elseif ($refund->status === Refund::STATUS_PROCESSING) {
+                $refund = $refundService->processRefund($refund, $this->getSystemUser());
+            } else {
+                return response()->json([
+                    'message' => "Cannot retry refund in '{$refund->status}' status.",
+                ], 422);
+            }
+
             return response()->json([
-                'message' => 'Stripe refund failed.',
+                'message' => 'Refund processed.',
+                'refund' => new RefundResource($refund->load(['booking', 'payment', 'initiator', 'approver'])),
+            ]);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        } catch (\RuntimeException $e) {
+            return response()->json([
+                'message' => 'Stripe processing failed.',
                 'error' => $e->getMessage(),
             ], 500);
         }
-
-        return response()->json([
-            'message' => 'Refund processed.',
-            'refund' => new RefundResource($refund->fresh()->load(['booking', 'payment'])),
-        ]);
     }
 
     /**
-     * Delete a pending/failed refund.
+     * Delete a non-terminal refund.
      *
      * DELETE /api/partner/refunds/{id}
      */
@@ -256,14 +234,31 @@ class RefundApiController extends Controller
             return response()->json(['message' => 'Refund not found.'], 404);
         }
 
-        if ($refund->status === 'processed') {
+        if ($refund->isTerminal()) {
             return response()->json([
-                'message' => 'Processed refunds cannot be deleted.',
+                'message' => 'Cannot delete a terminal refund.',
+                'status' => $refund->status,
             ], 422);
         }
 
         $refund->delete();
 
         return response()->json(['message' => 'Refund deleted.']);
+    }
+
+    /**
+     * Get or create a system user for partner API operations.
+     * Partner API uses a service account since there's no authenticated user.
+     */
+    private function getSystemUser()
+    {
+        return \App\Models\User::firstOrCreate(
+            ['email' => 'partner-api@clearboatbahamas.com'],
+            [
+                'name' => 'Partner API',
+                'password' => bcrypt(uniqid('', true)),
+                'role' => 'super_admin',
+            ]
+        );
     }
 }

@@ -10,20 +10,36 @@ class Refund extends Model
     protected $keyType = 'string';
     public $incrementing = false;
 
+    public const STATUS_PENDING = 'pending';
+    public const STATUS_APPROVED = 'approved';
+    public const STATUS_PROCESSING = 'processing';
+    public const STATUS_COMPLETED = 'completed';
+    public const STATUS_REJECTED = 'rejected';
+    public const STATUS_AGENT_HANDLED = 'agent_handled';
+
+    public const TYPE_FULL = 'full';
+    public const TYPE_PARTIAL = 'partial';
+
     protected $fillable = [
+        'id',
         'booking_id',
         'payment_id',
-        'stripe_refund_id',
         'amount_cents',
-        'reason',
-        'notes',
+        'fees_deducted_cents',
+        'type',
         'status',
+        'reason',
+        'rejection_reason',
+        'stripe_refund_id',
         'initiated_by',
+        'approved_by',
+        'approved_at',
+        'processed_at',
     ];
 
     protected $casts = [
-        'created_at' => 'datetime',
-        'updated_at' => 'datetime',
+        'approved_at' => 'datetime',
+        'processed_at' => 'datetime',
     ];
 
     protected static function booted(): void
@@ -45,13 +61,37 @@ class Refund extends Model
         return $this->belongsTo(Payment::class);
     }
 
-    public function scopePending($query)
+    public function initiator()
     {
-        return $query->where('status', 'pending');
+        return $this->belongsTo(User::class, 'initiated_by');
     }
 
-    public function scopeProcessed($query)
+    public function approver()
     {
-        return $query->where('status', 'processed');
+        return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    public function isPending(): bool
+    {
+        return $this->status === self::STATUS_PENDING;
+    }
+
+    public function isCompleted(): bool
+    {
+        return $this->status === self::STATUS_COMPLETED;
+    }
+
+    public function isAgentHandled(): bool
+    {
+        return $this->status === self::STATUS_AGENT_HANDLED;
+    }
+
+    public function isTerminal(): bool
+    {
+        return in_array($this->status, [
+            self::STATUS_COMPLETED,
+            self::STATUS_REJECTED,
+            self::STATUS_AGENT_HANDLED,
+        ]);
     }
 }
