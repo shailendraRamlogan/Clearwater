@@ -16,6 +16,8 @@ return [
 
     'admin_token' => env('ADMIN_TOKEN'),
 
+    'partner_token' => env('PARTNER_TOKEN'),
+
     'stripe' => [
         'secret' => env('STRIPE_SECRET_KEY'),
         'webhook_secret' => env('STRIPE_WEBHOOK_SECRET'),

@@ -10,6 +10,9 @@ use App\Http\Controllers\Api\GalleryPhotoController;
 use App\Http\Controllers\Api\TicketTypeController;
 use App\Http\Controllers\Api\AddonController;
 use App\Http\Controllers\Api\PrivateTourController;
+use App\Http\Controllers\Api\Partner\BookingApiController;
+use App\Http\Controllers\Api\Partner\PayoutApiController;
+use App\Http\Controllers\Api\Partner\RefundApiController;
 use Illuminate\Support\Facades\Route;
 // Public endpoints
 Route::get('/gallery-photos', [GalleryPhotoController::class, 'index'])->middleware('throttle:60,1');
@@ -42,4 +45,30 @@ Route::middleware(['auth.admin', 'throttle:120,1'])->group(function () {
     Route::get('/private-tour-requests/{id}', [PrivateTourController::class, 'show']);
     Route::patch('/private-tour-requests/{id}/confirm', [PrivateTourController::class, 'confirm']);
     Route::patch('/private-tour-requests/{id}/reject', [PrivateTourController::class, 'reject']);
+});
+
+// Partner CRUD API (separate token auth)
+Route::middleware(['auth.partner', 'throttle:120,1'])->prefix('partner')->group(function () {
+    // Bookings
+    Route::get('/bookings', [BookingApiController::class, 'index']);
+    Route::get('/bookings/{id}', [BookingApiController::class, 'show']);
+    Route::patch('/bookings/{id}', [BookingApiController::class, 'update']);
+    Route::patch('/bookings/{id}/cancel', [BookingApiController::class, 'cancel']);
+
+    // Payouts
+    Route::get('/payouts', [PayoutApiController::class, 'index']);
+    Route::post('/payouts', [PayoutApiController::class, 'store']);
+    Route::get('/payouts/{id}', [PayoutApiController::class, 'show']);
+    Route::patch('/payouts/{id}', [PayoutApiController::class, 'update']);
+    Route::patch('/payouts/{id}/confirm', [PayoutApiController::class, 'confirm']);
+    Route::patch('/payouts/{id}/reject', [PayoutApiController::class, 'reject']);
+    Route::delete('/payouts/{id}', [PayoutApiController::class, 'destroy']);
+
+    // Refunds
+    Route::get('/refunds', [RefundApiController::class, 'index']);
+    Route::post('/refunds', [RefundApiController::class, 'store']);
+    Route::get('/refunds/{id}', [RefundApiController::class, 'show']);
+    Route::patch('/refunds/{id}', [RefundApiController::class, 'update']);
+    Route::post('/refunds/{id}/retry', [RefundApiController::class, 'retry']);
+    Route::delete('/refunds/{id}', [RefundApiController::class, 'destroy']);
 });

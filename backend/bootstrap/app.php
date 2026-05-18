@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\AdminTokenAuth;
+use App\Http\Middleware\PartnerTokenAuth;
 use App\Http\Middleware\TrustProxies;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -16,6 +17,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
             'auth.admin' => AdminTokenAuth::class,
+            'auth.partner' => PartnerTokenAuth::class,
         ]);
 
         $middleware->api(prepend: [
